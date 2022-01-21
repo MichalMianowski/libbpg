@@ -7,4 +7,6 @@ typedef struct ArrayImage
     int ** image_array;
 } ArrayImage;
 
+ArrayImage get_array(char *filename);
+
 #endif

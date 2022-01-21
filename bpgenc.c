@@ -33,6 +33,7 @@
 #include <jpeglib.h>
 
 #include "bpgenc.h"
+#include "bpgdec.h"
 
 typedef uint16_t PIXEL;
 
@@ -2362,10 +2363,6 @@ int bpg_encoder_encode(BPGEncoderContext *s, Image *img,
     int extension_buf_len;
     int cb_size, width, height;
 
-    if (p->animated && !img) {
-        return bpg_encoder_encode_trailer(s, write_func, opaque);
-    }
-
     /* extract the alpha plane */
     if (img->has_alpha) {
         int c_idx;
@@ -2707,7 +2704,7 @@ struct option long_opts[] = {
     { NULL },
 };
 
-int main(int argc, char **argv)
+int save_image()
 {
     const char *infilename, *outfilename, *frame_delay_file;
     Image *img;
@@ -2730,6 +2727,7 @@ int main(int argc, char **argv)
     premultiplied_alpha = 0;
     frame_delay_file = NULL;
     
+    /*
     for(;;) {
         c = getopt_long_only(argc, argv, "q:o:hf:c:vm:b:e:a", long_opts, &option_index);
         if (c == -1)
@@ -2868,10 +2866,11 @@ int main(int argc, char **argv)
             exit(1);
         }
     }
+    */
 
-    if (optind >= argc) 
-        help(0);
-    infilename = argv[optind];
+    // if (optind >= argc) 
+    //     help(0);
+    // infilename = argv[optind];
 
     f = fopen(outfilename, "wb");
     if (!f) {
@@ -2885,86 +2884,59 @@ int main(int argc, char **argv)
         exit(1);
     }
 
-    if (p->animated) {
-        int frame_num, first_frame, frame_ticks;
-        char filename[1024];
-        FILE *f1;
-
-        if (frame_delay_file) {
-            f1 = fopen(frame_delay_file, "r");
-            if (!f1) {
-                fprintf(stderr, "Could not open '%s'\n", frame_delay_file);
-                exit(1);
-            }
-        } else {
-            f1 = NULL;
-        }
-
-        first_frame = 1;
-        for(frame_num = 0; ; frame_num++) {
-            if (get_filename_num(filename, sizeof(filename), infilename, frame_num) < 0) {
-                fprintf(stderr, "Invalid filename syntax: '%s'\n", infilename);
-                exit(1);
-            }
-            img = load_image(&md, filename, color_space, bit_depth, limited_range,
-                             premultiplied_alpha);
-            if (!img) {
-                if (frame_num == 0)
-                    continue; /* accept to start at 0 or 1 */
-                if (first_frame) {
-                    fprintf(stderr, "Could not read '%s'\n", filename);
-                    exit(1);
-                } else {
-                    break;
-                }
-            }
-            frame_ticks = 1;
-            if (f1) {
-                float fdelay;
-                if (fscanf(f1, "%f", &fdelay) == 1) {
-                    frame_ticks = lrint(fdelay * p->frame_delay_den / (p->frame_delay_num * 100));
-                    if (frame_ticks < 1)
-                        frame_ticks = 1;
-                }
-            }
+    // // ladowanie img chyba jako array
+    img = load_image(&md, infilename, color_space, bit_depth, limited_range,
+                        premultiplied_alpha);
             
-            if (p->verbose)
-                printf("Encoding '%s' ticks=%d\n", filename, frame_ticks);
-            
-            if (keep_metadata && first_frame) {
-                bpg_encoder_set_extension_data(enc_ctx, md);
-            } else {
-                bpg_md_free(md);
-            }
-            bpg_encoder_set_frame_duration(enc_ctx, frame_ticks);
-            bpg_encoder_encode(enc_ctx, img, my_write_func, f);
-            image_free(img);
+    ArrayImage img_bpg = get_array("sample-rgb-444.bpg");
+    img->w = img_bpg.w;
+    img->h = img_bpg.h;
+    img->has_alpha = img_bpg.alpha;
+    img->data = img_bpg.image_array[0][0];
 
-            first_frame = 0;
-        }
-        if (f1)
-            fclose(f1);
-        /* end of stream */
-        bpg_encoder_encode(enc_ctx, NULL, my_write_func, f);
-    } else {
-        img = load_image(&md, infilename, color_space, bit_depth, limited_range,
-                         premultiplied_alpha);
-        if (!img) {
-            fprintf(stderr, "Could not read '%s'\n", infilename);
-            exit(1);
-        }
+    // // image_array:
+    //     int w, h;
+    //     uint8_t has_alpha;  //z shape
+    //     uint8_t *data[4];
+    //     int linesize[4];
+    // // load_image - args:
+    //     uint8_t limited_range;
+    //     uint8_t premultiplied_alpha;
+    //     BPGColorSpaceEnum color_space;
+    //     uint8_t bit_depth;
+    // // image_alloc - args:
+    //     BPGImageFormatEnum format; /* x_VIDEO values are forbidden here */
+    // // jako parametr ustala sie preferowany format
+    // // mozna sprawdzic jedynie czy przypadkiem nie jest to czarno biale
+    // // jak zapisuje z png to rozroznia tylko gray i BPG_FORMAT_444
+    
+    // // image_alloc:
+    //     // in image_alloc set to 1 - hardcoded?
+    //         uint8_t c_h_phase; /* 4:2:2 or 4:2:0 : give the horizontal chroma
+    //                                 position. 0=MPEG2, 1=JPEG. */
+    //         uint8_t pixel_shift; /* (1 << pixel_shift) bytes per pixel */
         
-        if (!keep_metadata && md) {
-            bpg_md_free(md);
-            md = NULL;
-        }
-        
-        bpg_encoder_set_extension_data(enc_ctx, md);
-        
-        bpg_encoder_encode(enc_ctx, img, my_write_func, f);
-        image_free(img);
+    // // read_jpeg (wewnątrz load_image)
+    //     // jpeg colorspace JCS_YCCK lub JCS_CMYK
+    //     uint8_t has_w_plane;
+
+    if (!img) {
+        fprintf(stderr, "Could not read '%s'\n", infilename);
+        exit(1);
     }
-
+    
+    if (!keep_metadata && md) {
+        bpg_md_free(md);
+        md = NULL;
+    }
+    
+    // ustawia metadata
+    bpg_encoder_set_extension_data(enc_ctx, md);
+    
+    // zapis wlasciwy
+    bpg_encoder_encode(enc_ctx, img, my_write_func, f);
+    image_free(img);
+    
     fclose(f);
     
     bpg_encoder_close(enc_ctx);
