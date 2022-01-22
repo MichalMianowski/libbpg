@@ -216,6 +216,8 @@ bpgview$(EXE): bpgview.o libbpg.a
 
 # install: bpgenc bpgdec
 # 	install -s -m 755 $^ $(prefix)/bin
+install: bpgenc
+	install -s -m 755 $^ $(prefix)/bin
 
 CLEAN_DIRS=doc html libavcodec libavutil \
      jctvc jctvc/TLibEncoder jctvc/TLibVideoIO jctvc/TLibCommon jctvc/libmd5

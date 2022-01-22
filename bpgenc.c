@@ -722,10 +722,8 @@ Image *image_alloc(int w, int h, BPGImageFormatEnum format, int has_alpha,
         w1 = (w1 + (W_PAD - 1)) & ~(W_PAD - 1);
         h1 = (h1 + (W_PAD - 1)) & ~(W_PAD - 1);
         
-        // linesize = w1 << img->pixel_shift;
-        // img->data[i] = malloc(linesize * h1);
-        linesize = w;
-        img->data[i] = malloc(linesize * h);
+        linesize = w1 << img->pixel_shift;
+        img->data[i] = malloc(linesize * h1);
         img->linesize[i] = linesize;
     }
     return img;
@@ -2192,13 +2190,12 @@ static char *hevc_encoder_name[HEVC_ENCODER_COUNT] = {
 };
 
 static HEVCEncoder *hevc_encoder_tab[HEVC_ENCODER_COUNT] = {
+#if defined(USE_X265)
     &x265_hevc_encoder,
-// #if defined(USE_X265)
-//     &x265_hevc_encoder,
-// #endif
-// #if defined(USE_JCTVC)
-//     &jctvc_encoder,
-// #endif
+#endif
+#if defined(USE_JCTVC)
+    &jctvc_encoder,
+#endif
 };
 
 #define IMAGE_HEADER_MAGIC 0x425047fb
@@ -2365,6 +2362,10 @@ int bpg_encoder_encode(BPGEncoderContext *s, Image *img,
     uint8_t *extension_buf;
     int extension_buf_len;
     int cb_size, width, height;
+
+    if (p->animated && !img) {
+        return bpg_encoder_encode_trailer(s, write_func, opaque);
+    }
 
     /* extract the alpha plane */
     if (img->has_alpha) {
@@ -2651,34 +2652,34 @@ void help(int is_full)
         strcat(hevc_encoders, hevc_encoder_name[i]);
     }
         
-    // printf("BPG Image Encoder version " CONFIG_BPG_VERSION "\n"
-    //        "usage: bpgenc [options] infile.[jpg|png]\n"
-    //        "\n"
-    //        "Main options:\n"
-    //        "-h                   show the full help (including the advanced options)\n"
-    //        "-o outfile           set output filename (default = %s)\n"
-    //        "-q qp                set quantizer parameter (smaller gives better quality,\n" 
-    //        "                     range: 0-51, default = %d)\n"
-    //        "-f cfmt              set the preferred chroma format (420, 422, 444,\n"
-    //        "                     default=420)\n"
-    //        "-c color_space       set the preferred color space (ycbcr, rgb, ycgco,\n"
-    //        "                     ycbcr_bt709, ycbcr_bt2020, default=ycbcr)\n"
-    //        "-b bit_depth         set the bit depth (8 to %d, default = %d)\n"
-    //        "-lossless            enable lossless mode\n"
-    //        "-e encoder           select the HEVC encoder (%s, default = %s)\n"
-    //        "-m level             select the compression level (1=fast, 9=slow, default = %d)\n"
-    //        "\n"
-    //        "Animation options:\n"
-    //        "-a                   generate animations from a sequence of images. Use %%d or\n"
-    //        "                     %%Nd (N = number of digits) in the filename to specify the\n"
-    //        "                     image index, starting from 0 or 1.\n"
-    //        "-fps N               set the frame rate (default = 25)\n"
-    //        "-loop N              set the number of times the animation is played. 0 means\n"
-    //        "                     infinite (default = 0)\n"
-    //        "-delayfile file      text file containing one number per image giving the\n"
-    //        "                     display delay per image in centiseconds.\n"
-    //        , DEFAULT_OUTFILENAME, DEFAULT_QP, BIT_DEPTH_MAX, DEFAULT_BIT_DEPTH,
-    //        hevc_encoders, hevc_encoder_name[0], DEFAULT_COMPRESS_LEVEL);
+    printf("BPG Image Encoder version " CONFIG_BPG_VERSION "\n"
+           "usage: bpgenc [options] infile.[jpg|png]\n"
+           "\n"
+           "Main options:\n"
+           "-h                   show the full help (including the advanced options)\n"
+           "-o outfile           set output filename (default = %s)\n"
+           "-q qp                set quantizer parameter (smaller gives better quality,\n" 
+           "                     range: 0-51, default = %d)\n"
+           "-f cfmt              set the preferred chroma format (420, 422, 444,\n"
+           "                     default=420)\n"
+           "-c color_space       set the preferred color space (ycbcr, rgb, ycgco,\n"
+           "                     ycbcr_bt709, ycbcr_bt2020, default=ycbcr)\n"
+           "-b bit_depth         set the bit depth (8 to %d, default = %d)\n"
+           "-lossless            enable lossless mode\n"
+           "-e encoder           select the HEVC encoder (%s, default = %s)\n"
+           "-m level             select the compression level (1=fast, 9=slow, default = %d)\n"
+           "\n"
+           "Animation options:\n"
+           "-a                   generate animations from a sequence of images. Use %%d or\n"
+           "                     %%Nd (N = number of digits) in the filename to specify the\n"
+           "                     image index, starting from 0 or 1.\n"
+           "-fps N               set the frame rate (default = 25)\n"
+           "-loop N              set the number of times the animation is played. 0 means\n"
+           "                     infinite (default = 0)\n"
+           "-delayfile file      text file containing one number per image giving the\n"
+           "                     display delay per image in centiseconds.\n"
+           , DEFAULT_OUTFILENAME, DEFAULT_QP, BIT_DEPTH_MAX, DEFAULT_BIT_DEPTH,
+           hevc_encoders, hevc_encoder_name[0], DEFAULT_COMPRESS_LEVEL);
 
     if (is_full) {
         printf("\nAdvanced options:\n"
@@ -2707,7 +2708,7 @@ struct option long_opts[] = {
     { NULL },
 };
 
-int save_image()
+int main(int argc, char **argv)
 {
     const char *infilename, *outfilename, *frame_delay_file;
     Image *img;
@@ -2730,7 +2731,6 @@ int save_image()
     premultiplied_alpha = 0;
     frame_delay_file = NULL;
     
-    /*
     for(;;) {
         c = getopt_long_only(argc, argv, "q:o:hf:c:vm:b:e:a", long_opts, &option_index);
         if (c == -1)
@@ -2869,11 +2869,10 @@ int save_image()
             exit(1);
         }
     }
-    */
 
-    // if (optind >= argc) 
-    //     help(0);
-    // infilename = argv[optind];
+    if (optind >= argc) 
+        help(0);
+    infilename = argv[optind];
 
     f = fopen(outfilename, "wb");
     if (!f) {
@@ -2887,98 +2886,106 @@ int save_image()
         exit(1);
     }
 
-    // // ladowanie img chyba jako array
-    img = load_image(&md, infilename, color_space, bit_depth, limited_range,
-                        premultiplied_alpha);
-            
-    printf("getting image bpg\n");
-    ArrayImage img_bpg = get_array("sample-rgb-444.bpg");
-    printf("getting image details\n");
-    int test_w = img_bpg.w;
-    int test_h = img_bpg.h;
-    uint8_t test_has_alpha = img_bpg.alpha;
-    // ERROR! lvalue
-    printf("allocating new Image\n");
-    img = image_alloc(test_w, test_h, BPG_FORMAT_444, test_has_alpha, BPG_CS_RGB, 8);
-    printf("petla smierci\n");
-    for(int y=0; y<test_h; y++){
-        printf("\ny=%d\n", y);
-        for(int x=0; x<test_w; x++){
-            // printf("y=%d, x=%d\n ", y, x);
-            // img->data[y*test_w + x] = img_bpg.image_array[y][x];
-            printf("x=%d ", x);
-            img->data[0][y*test_w + x] = 1;
-            img->data[1][y*test_w + x] = 1;
-            img->data[2][y*test_w + x] = 1;
+    if (p->animated) {
+        int frame_num, first_frame, frame_ticks;
+        char filename[1024];
+        FILE *f1;
+
+        if (frame_delay_file) {
+            f1 = fopen(frame_delay_file, "r");
+            if (!f1) {
+                fprintf(stderr, "Could not open '%s'\n", frame_delay_file);
+                exit(1);
+            }
+        } else {
+            f1 = NULL;
         }
-    }
-    printf("\n przepisywanie zakonczone!\n");
-    // img->data = img_bpg.image_array[0][0];
 
-    // // image_array:
-    //     int w, h;
-    //     uint8_t has_alpha;  //z shape
-    //     uint8_t *data[4];
-    //     int linesize[4];
-    // // load_image - args:
-    //     uint8_t limited_range;
-    //     uint8_t premultiplied_alpha;
-    //     BPGColorSpaceEnum color_space;
-    //     uint8_t bit_depth;
-    // // image_alloc - args:
-    //     BPGImageFormatEnum format; /* x_VIDEO values are forbidden here */
-    // // jako parametr ustala sie preferowany format
-    // // mozna sprawdzic jedynie czy przypadkiem nie jest to czarno biale
-    // // jak zapisuje z png to rozroznia tylko gray i BPG_FORMAT_444
-    
-    // // image_alloc:
-    //     // in image_alloc set to 1 - hardcoded?
-    //         uint8_t c_h_phase; /* 4:2:2 or 4:2:0 : give the horizontal chroma
-    //                                 position. 0=MPEG2, 1=JPEG. */
-    //         uint8_t pixel_shift; /* (1 << pixel_shift) bytes per pixel */
+        first_frame = 1;
+        for(frame_num = 0; ; frame_num++) {
+            if (get_filename_num(filename, sizeof(filename), infilename, frame_num) < 0) {
+                fprintf(stderr, "Invalid filename syntax: '%s'\n", infilename);
+                exit(1);
+            }
+            img = load_image(&md, filename, color_space, bit_depth, limited_range,
+                             premultiplied_alpha);
+            if (!img) {
+                if (frame_num == 0)
+                    continue; /* accept to start at 0 or 1 */
+                if (first_frame) {
+                    fprintf(stderr, "Could not read '%s'\n", filename);
+                    exit(1);
+                } else {
+                    break;
+                }
+            }
+            frame_ticks = 1;
+            if (f1) {
+                float fdelay;
+                if (fscanf(f1, "%f", &fdelay) == 1) {
+                    frame_ticks = lrint(fdelay * p->frame_delay_den / (p->frame_delay_num * 100));
+                    if (frame_ticks < 1)
+                        frame_ticks = 1;
+                }
+            }
+            
+            if (p->verbose)
+                printf("Encoding '%s' ticks=%d\n", filename, frame_ticks);
+            
+            if (keep_metadata && first_frame) {
+                bpg_encoder_set_extension_data(enc_ctx, md);
+            } else {
+                bpg_md_free(md);
+            }
+            bpg_encoder_set_frame_duration(enc_ctx, frame_ticks);
+            bpg_encoder_encode(enc_ctx, img, my_write_func, f);
+            image_free(img);
+
+            first_frame = 0;
+        }
+        if (f1)
+            fclose(f1);
+        /* end of stream */
+        bpg_encoder_encode(enc_ctx, NULL, my_write_func, f);
+    } else {
+        img = load_image(&md, infilename, color_space, bit_depth, limited_range,
+                         premultiplied_alpha);
+        ArrayImage img_bpg;
+        img_bpg = get_array("out.bpg");
+        // int test_w = img_bpg.w;
+        // int test_h = img_bpg.h;
+        // // for(int y=0; y<test_h; y++){
+        //     for(int x=0; x<test_w; x++){
+        //         // printf("y=%d, x=%d\n ", y, x);
+        //         // img->data[y*test_w + x] = img_bpg.image_array[y][x];
+        //         img->data[0][y*test_w + x] = img_bpg.image_array[y][3*x];
+        //         img->data[1][y*test_w + x] = img_bpg.image_array[y][3*x + 1];
+        //         img->data[2][y*test_w + x] = img_bpg.image_array[y][3*x + 2];
+        //     }
+        // }
+        printf("\n przepisywanie zakonczone!\n");
+
+        if (!img) {
+            fprintf(stderr, "Could not read '%s'\n", infilename);
+            exit(1);
+        }
         
-    // // read_jpeg (wewnątrz load_image)
-    //     // jpeg colorspace JCS_YCCK lub JCS_CMYK
-    //     uint8_t has_w_plane;
-
-    //
-
-    if (!img) {
-        fprintf(stderr, "Could not read '%s'\n", infilename);
-        exit(1);
+        if (!keep_metadata && md) {
+            bpg_md_free(md);
+            md = NULL;
+        }
+        
+        bpg_encoder_set_extension_data(enc_ctx, md);
+        
+        bpg_encoder_encode(enc_ctx, img, my_write_func, f);
+        image_free(img);
     }
-    
-    if (!keep_metadata && md) {
-        bpg_md_free(md);
-        md = NULL;
-    }
-    
-    // ustawia metadata
-    // bpg_encoder_set_extension_data(enc_ctx, md);
-    
-    // zapis wlasciwy
-    printf("\nzapis wlasciwy\n");
-    bpg_encoder_encode(enc_ctx, img, my_write_func, f);
-    image_free(img);
-    
+
     fclose(f);
     
     bpg_encoder_close(enc_ctx);
     
     bpg_encoder_param_free(p);
 
-    return 0;
-}
-
-// save_image();
-
-// int main(){
-//     printf("main go");
-//     return 0;
-// }
-
-int main(int argc, char **argv){
-    save_image();
-    printf("main go with args");
     return 0;
 }

@@ -1,6 +1,8 @@
 #ifndef _BPGDEC_H
 #define _BPGDEC_H
 
+#include "libbpg.h"
+
 typedef struct ArrayImage
 {
     int w, h, alpha;
