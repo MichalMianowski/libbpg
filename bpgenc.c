@@ -722,8 +722,10 @@ Image *image_alloc(int w, int h, BPGImageFormatEnum format, int has_alpha,
         w1 = (w1 + (W_PAD - 1)) & ~(W_PAD - 1);
         h1 = (h1 + (W_PAD - 1)) & ~(W_PAD - 1);
         
-        linesize = w1 << img->pixel_shift;
-        img->data[i] = malloc(linesize * h1);
+        // linesize = w1 << img->pixel_shift;
+        // img->data[i] = malloc(linesize * h1);
+        linesize = w;
+        img->data[i] = malloc(linesize * h);
         img->linesize[i] = linesize;
     }
     return img;
@@ -2190,12 +2192,13 @@ static char *hevc_encoder_name[HEVC_ENCODER_COUNT] = {
 };
 
 static HEVCEncoder *hevc_encoder_tab[HEVC_ENCODER_COUNT] = {
-#if defined(USE_X265)
     &x265_hevc_encoder,
-#endif
-#if defined(USE_JCTVC)
-    &jctvc_encoder,
-#endif
+// #if defined(USE_X265)
+//     &x265_hevc_encoder,
+// #endif
+// #if defined(USE_JCTVC)
+//     &jctvc_encoder,
+// #endif
 };
 
 #define IMAGE_HEADER_MAGIC 0x425047fb
@@ -2648,34 +2651,34 @@ void help(int is_full)
         strcat(hevc_encoders, hevc_encoder_name[i]);
     }
         
-    printf("BPG Image Encoder version " CONFIG_BPG_VERSION "\n"
-           "usage: bpgenc [options] infile.[jpg|png]\n"
-           "\n"
-           "Main options:\n"
-           "-h                   show the full help (including the advanced options)\n"
-           "-o outfile           set output filename (default = %s)\n"
-           "-q qp                set quantizer parameter (smaller gives better quality,\n" 
-           "                     range: 0-51, default = %d)\n"
-           "-f cfmt              set the preferred chroma format (420, 422, 444,\n"
-           "                     default=420)\n"
-           "-c color_space       set the preferred color space (ycbcr, rgb, ycgco,\n"
-           "                     ycbcr_bt709, ycbcr_bt2020, default=ycbcr)\n"
-           "-b bit_depth         set the bit depth (8 to %d, default = %d)\n"
-           "-lossless            enable lossless mode\n"
-           "-e encoder           select the HEVC encoder (%s, default = %s)\n"
-           "-m level             select the compression level (1=fast, 9=slow, default = %d)\n"
-           "\n"
-           "Animation options:\n"
-           "-a                   generate animations from a sequence of images. Use %%d or\n"
-           "                     %%Nd (N = number of digits) in the filename to specify the\n"
-           "                     image index, starting from 0 or 1.\n"
-           "-fps N               set the frame rate (default = 25)\n"
-           "-loop N              set the number of times the animation is played. 0 means\n"
-           "                     infinite (default = 0)\n"
-           "-delayfile file      text file containing one number per image giving the\n"
-           "                     display delay per image in centiseconds.\n"
-           , DEFAULT_OUTFILENAME, DEFAULT_QP, BIT_DEPTH_MAX, DEFAULT_BIT_DEPTH,
-           hevc_encoders, hevc_encoder_name[0], DEFAULT_COMPRESS_LEVEL);
+    // printf("BPG Image Encoder version " CONFIG_BPG_VERSION "\n"
+    //        "usage: bpgenc [options] infile.[jpg|png]\n"
+    //        "\n"
+    //        "Main options:\n"
+    //        "-h                   show the full help (including the advanced options)\n"
+    //        "-o outfile           set output filename (default = %s)\n"
+    //        "-q qp                set quantizer parameter (smaller gives better quality,\n" 
+    //        "                     range: 0-51, default = %d)\n"
+    //        "-f cfmt              set the preferred chroma format (420, 422, 444,\n"
+    //        "                     default=420)\n"
+    //        "-c color_space       set the preferred color space (ycbcr, rgb, ycgco,\n"
+    //        "                     ycbcr_bt709, ycbcr_bt2020, default=ycbcr)\n"
+    //        "-b bit_depth         set the bit depth (8 to %d, default = %d)\n"
+    //        "-lossless            enable lossless mode\n"
+    //        "-e encoder           select the HEVC encoder (%s, default = %s)\n"
+    //        "-m level             select the compression level (1=fast, 9=slow, default = %d)\n"
+    //        "\n"
+    //        "Animation options:\n"
+    //        "-a                   generate animations from a sequence of images. Use %%d or\n"
+    //        "                     %%Nd (N = number of digits) in the filename to specify the\n"
+    //        "                     image index, starting from 0 or 1.\n"
+    //        "-fps N               set the frame rate (default = 25)\n"
+    //        "-loop N              set the number of times the animation is played. 0 means\n"
+    //        "                     infinite (default = 0)\n"
+    //        "-delayfile file      text file containing one number per image giving the\n"
+    //        "                     display delay per image in centiseconds.\n"
+    //        , DEFAULT_OUTFILENAME, DEFAULT_QP, BIT_DEPTH_MAX, DEFAULT_BIT_DEPTH,
+    //        hevc_encoders, hevc_encoder_name[0], DEFAULT_COMPRESS_LEVEL);
 
     if (is_full) {
         printf("\nAdvanced options:\n"
@@ -2888,11 +2891,29 @@ int save_image()
     img = load_image(&md, infilename, color_space, bit_depth, limited_range,
                         premultiplied_alpha);
             
+    printf("getting image bpg\n");
     ArrayImage img_bpg = get_array("sample-rgb-444.bpg");
-    img->w = img_bpg.w;
-    img->h = img_bpg.h;
-    img->has_alpha = img_bpg.alpha;
-    img->data = img_bpg.image_array[0][0];
+    printf("getting image details\n");
+    int test_w = img_bpg.w;
+    int test_h = img_bpg.h;
+    uint8_t test_has_alpha = img_bpg.alpha;
+    // ERROR! lvalue
+    printf("allocating new Image\n");
+    img = image_alloc(test_w, test_h, BPG_FORMAT_444, test_has_alpha, BPG_CS_RGB, 8);
+    printf("petla smierci\n");
+    for(int y=0; y<test_h; y++){
+        printf("\ny=%d\n", y);
+        for(int x=0; x<test_w; x++){
+            // printf("y=%d, x=%d\n ", y, x);
+            // img->data[y*test_w + x] = img_bpg.image_array[y][x];
+            printf("x=%d ", x);
+            img->data[0][y*test_w + x] = 1;
+            img->data[1][y*test_w + x] = 1;
+            img->data[2][y*test_w + x] = 1;
+        }
+    }
+    printf("\n przepisywanie zakonczone!\n");
+    // img->data = img_bpg.image_array[0][0];
 
     // // image_array:
     //     int w, h;
@@ -2920,6 +2941,8 @@ int save_image()
     //     // jpeg colorspace JCS_YCCK lub JCS_CMYK
     //     uint8_t has_w_plane;
 
+    //
+
     if (!img) {
         fprintf(stderr, "Could not read '%s'\n", infilename);
         exit(1);
@@ -2931,9 +2954,10 @@ int save_image()
     }
     
     // ustawia metadata
-    bpg_encoder_set_extension_data(enc_ctx, md);
+    // bpg_encoder_set_extension_data(enc_ctx, md);
     
     // zapis wlasciwy
+    printf("\nzapis wlasciwy\n");
     bpg_encoder_encode(enc_ctx, img, my_write_func, f);
     image_free(img);
     
@@ -2943,5 +2967,18 @@ int save_image()
     
     bpg_encoder_param_free(p);
 
+    return 0;
+}
+
+// save_image();
+
+// int main(){
+//     printf("main go");
+//     return 0;
+// }
+
+int main(int argc, char **argv){
+    save_image();
+    printf("main go with args");
     return 0;
 }
