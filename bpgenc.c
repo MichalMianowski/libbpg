@@ -1465,7 +1465,7 @@ Image *read_image_array(){
     premultiplied_alpha = 0;
     out_bit_depth = 8;
     
-    img_bpg = get_array("sample-rgb-444.bpg");
+    img_bpg = get_array("042-gray-l.bpg");
     has_alpha = img_bpg.alpha;
     
     img = image_alloc(img_bpg.w, img_bpg.h, 
@@ -3100,22 +3100,15 @@ int main(int argc, char **argv)
         //     bpg_md_free(md);
         //     md = NULL;
         // }
+        // bpg_encoder_set_extension_data(enc_ctx, md);
         
-        printf("naruszenie A:\n");
-        bpg_encoder_set_extension_data(enc_ctx, md);
-        
-        printf("naruszenie B:\n");
         bpg_encoder_encode(enc_ctx, img, my_write_func, f);
-        printf("naruszenie C:\n");
         image_free(img);
     }
 
-    printf("naruszenie D:\n");
     fclose(f);
-    printf("naruszenie E:\n");
     bpg_encoder_close(enc_ctx);
-    printf("naruszenie F:\n");
     bpg_encoder_param_free(p);
-    printf("naruszenie G:\n");
+
     return 0;
 }
