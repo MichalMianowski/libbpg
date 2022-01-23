@@ -216,7 +216,7 @@ bpgview$(EXE): bpgview.o libbpg.a
 
 # install: bpgenc bpgdec
 # 	install -s -m 755 $^ $(prefix)/bin
-install: bpgenc
+install: bpgdec
 	install -s -m 755 $^ $(prefix)/bin
 
 CLEAN_DIRS=doc html libavcodec libavutil \

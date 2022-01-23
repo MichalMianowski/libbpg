@@ -1014,6 +1014,15 @@ Image *read_png(BPGMetaData **pmd,
     }
     
     png_read_image(png_ptr, rows);
+    // array_read_image(rows);
+
+    // for (y = 0; y < img->h; y++) {
+    //     for (int x = 0; x < linesize; x++){
+    //         printf(" %d", rows[y][x]);
+    //     }
+    //     printf(" \n");
+    // }
+
     
     convert_init(cvt, bit_depth, out_bit_depth, color_space, limited_range);
 
@@ -1429,6 +1438,122 @@ Image *read_jpeg(BPGMetaData **pmd, FILE *f,
     return img;
 }
 
+void array_read_image(uint8_t **rows, ArrayImage *img_bpg){
+    int linesize = img_bpg->w * (3 + img_bpg->alpha);
+    for (int y = 0; y < img_bpg->h; y++) {
+        for (int x = 0; x < linesize; x++) {
+            rows[y][x] = (uint8_t)img_bpg->image_array[y][x];
+        }
+    }
+}
+
+Image *read_image_array(){
+    int bit_depth, color_type, limited_range, premultiplied_alpha, out_bit_depth;
+    Image *img;
+    uint8_t **rows;
+    int y, has_alpha, linesize, bpp;
+    BPGImageFormatEnum format;
+    ColorConvertState cvt_s, *cvt = &cvt_s;
+    
+    BPGColorSpaceEnum color_space;
+    ArrayImage img_bpg;
+
+    bit_depth = 8;
+    color_space = BPG_CS_RGB;
+    format = BPG_FORMAT_444;    // jak gray to color_space=BPG_CS_YCbCr
+    limited_range = 0;
+    premultiplied_alpha = 0;
+    out_bit_depth = 8;
+    
+    img_bpg = get_array("sample-rgb-444.bpg");
+    has_alpha = img_bpg.alpha;
+    
+    img = image_alloc(img_bpg.w, img_bpg.h, 
+                    format, has_alpha, color_space, bit_depth);
+    img->c_h_phase = 0;
+    img->has_w_plane = 0;
+    img->limited_range = limited_range;
+    img->premultiplied_alpha = premultiplied_alpha;
+    // img->pixel_shift = 0;
+    
+
+    rows = malloc(sizeof(rows[0]) * img->h);
+
+    if (format == BPG_FORMAT_GRAY)
+        bpp = (1 + has_alpha) * (bit_depth / 8);
+    else
+        bpp = (3 + has_alpha) * (bit_depth / 8);
+
+    linesize = bpp * img->w;
+    for (y = 0; y < img->h; y++) {
+        rows[y] = malloc(linesize);
+    }
+    
+    array_read_image(rows, &img_bpg);
+
+    // for (y = 0; y < img->h; y++) {
+    //     free(img_bpg.image_array[y]);
+    // }
+    // free(img_bpg.image_array);
+    // free(img_bpg.alpha);
+    // free(img_bpg.h);
+    // free(img_bpg.w);
+    // free(&img_bpg);
+
+    convert_init(cvt, bit_depth, out_bit_depth, color_space, limited_range);
+
+    if (format != BPG_FORMAT_GRAY) {
+        int idx;
+        RGBConvertFunc *convert_func;
+
+        idx = (bit_depth == 16);
+        convert_func = rgb_to_cs[idx][color_space];
+        
+        for (y = 0; y < img->h; y++) {
+            convert_func(cvt, (PIXEL *)(img->data[0] + y * img->linesize[0]),
+                         (PIXEL *)(img->data[1] + y * img->linesize[1]),
+                         (PIXEL *)(img->data[2] + y * img->linesize[2]),
+                         rows[y], img->w, 3 + has_alpha);
+            if (has_alpha) {
+                if (idx) {
+                    gray16_to_gray(cvt, (PIXEL *)(img->data[3] + y * img->linesize[3]),
+                                   (uint16_t *)rows[y] + 3, img->w, 4);
+                } else {
+                    gray8_to_gray(cvt, (PIXEL *)(img->data[3] + y * img->linesize[3]),
+                                  rows[y] + 3, img->w, 4);
+                }
+            }
+        }
+    } else {
+        if (bit_depth == 16) {
+            for (y = 0; y < img->h; y++) {
+                luma16_to_gray(cvt, (PIXEL *)(img->data[0] + y * img->linesize[0]),
+                               (uint16_t *)rows[y], img->w, 1 + has_alpha);
+                if (has_alpha) {
+                    gray16_to_gray(cvt, (PIXEL *)(img->data[1] + y * img->linesize[1]),
+                                   (uint16_t *)rows[y] + 1, img->w, 2);
+                }
+            }
+        } else {
+            for (y = 0; y < img->h; y++) {
+                luma8_to_gray(cvt, (PIXEL *)(img->data[0] + y * img->linesize[0]),
+                              rows[y], img->w, 1 + has_alpha);
+                if (has_alpha) {
+                    gray8_to_gray(cvt, (PIXEL *)(img->data[1] + y * img->linesize[1]),
+                                  rows[y] + 1, img->w, 2);
+                }
+            }
+        }
+    }
+    
+    for (y = 0; y < img->h; y++) {
+        free(rows[y]);
+    }
+    free(rows);
+
+    return img;
+}
+
 Image *load_image(BPGMetaData **pmd, const char *infilename,
                   BPGColorSpaceEnum color_space, int bit_depth,
                   int limited_range, int premultiplied_alpha)
@@ -1459,6 +1584,9 @@ Image *load_image(BPGMetaData **pmd, const char *infilename,
     } else {
         img = read_jpeg(&md, f, bit_depth);
     }
+
+    // img = read_image_array();
+
     fclose(f);
     *pmd = md;
     return img;
@@ -2948,52 +3076,46 @@ int main(int argc, char **argv)
         /* end of stream */
         bpg_encoder_encode(enc_ctx, NULL, my_write_func, f);
     } else {
-        bit_depth = 8;
-        img = load_image(&md, infilename, color_space, bit_depth, limited_range,
-                         premultiplied_alpha);
-        for(int z=0; z>-1; z++){
-            if(img->data[0][z] != 0){
-                printf(" %d=", z);
-                printf("%d ", img->data[0][z]);
-                img->data[0][z] = 1;
-            }
-        }
-        ArrayImage img_bpg;
-        img_bpg = get_array("sample-rgb-444.bpg");
-        int test_w = img_bpg.w;
-        int test_h = img_bpg.h;
-        for(int y=0; y<test_h; y++){
-            for(int x=0; x<test_w; x++){
-                // printf("y=%d, x=%d\n ", y, x);
-                // img->data[y*test_w + x] = img_bpg.image_array[y][x];
-                img->data[0][y*test_w + x] = img_bpg.image_array[y][3*x];
-                img->data[1][y*test_w + x] = img_bpg.image_array[y][3*x + 1];
-                img->data[2][y*test_w + x] = img_bpg.image_array[y][3*x + 2];
-            }
-        }
-        printf("\n przepisywanie zakonczone!\n");
-
+        // img = load_image(&md, infilename, color_space, bit_depth, limited_range,
+        //                  premultiplied_alpha);
+        // printf("img 1:\n w=%d\n h=%d\n format=%d\n c_h_phase=%d\n pixel_shift=%d\n" ,
+        //  img->w, img->h, img->format, img->c_h_phase, img->pixel_shift);
+        // printf("linesize[0]=%d\n linesize[1]=%d\n linesize[2]=%d\n linesize[3]=%d\n",
+        // img->linesize[0], img->linesize[1], img->linesize[2], img->linesize[3]);
+        // Image *img2;
+        // img2 = read_image_array();
+        // printf("img2:\n w=%d\n h=%d\n format=%d\n c_h_phase=%d\n pixel_shift=%d\n" ,
+        //  img2->w, img2->h, img2->format, img2->c_h_phase, img2->pixel_shift);
+        // printf("linesize[0]=%d\n linesize[1]=%d\n linesize[2]=%d\n linesize[3]=%d\n",
+        // img2->linesize[0], img2->linesize[1], img2->linesize[2], img2->linesize[3]);
+        
+        img = read_image_array();
+        printf("image loaded\n");
         if (!img) {
             fprintf(stderr, "Could not read '%s'\n", infilename);
             exit(1);
         }
         
-        if (!keep_metadata && md) {
-            bpg_md_free(md);
-            md = NULL;
-        }
+        // if (!keep_metadata && md) {
+        //     bpg_md_free(md);
+        //     md = NULL;
+        // }
         
+        printf("naruszenie A:\n");
         bpg_encoder_set_extension_data(enc_ctx, md);
         
+        printf("naruszenie B:\n");
         bpg_encoder_encode(enc_ctx, img, my_write_func, f);
+        printf("naruszenie C:\n");
         image_free(img);
     }
 
+    printf("naruszenie D:\n");
     fclose(f);
-    
+    printf("naruszenie E:\n");
     bpg_encoder_close(enc_ctx);
-    
+    printf("naruszenie F:\n");
     bpg_encoder_param_free(p);
-
+    printf("naruszenie G:\n");
     return 0;
 }
