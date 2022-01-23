@@ -2948,21 +2948,29 @@ int main(int argc, char **argv)
         /* end of stream */
         bpg_encoder_encode(enc_ctx, NULL, my_write_func, f);
     } else {
+        bit_depth = 8;
         img = load_image(&md, infilename, color_space, bit_depth, limited_range,
                          premultiplied_alpha);
+        for(int z=0; z>-1; z++){
+            if(img->data[0][z] != 0){
+                printf(" %d=", z);
+                printf("%d ", img->data[0][z]);
+                img->data[0][z] = 1;
+            }
+        }
         ArrayImage img_bpg;
-        img_bpg = get_array("out.bpg");
-        // int test_w = img_bpg.w;
-        // int test_h = img_bpg.h;
-        // // for(int y=0; y<test_h; y++){
-        //     for(int x=0; x<test_w; x++){
-        //         // printf("y=%d, x=%d\n ", y, x);
-        //         // img->data[y*test_w + x] = img_bpg.image_array[y][x];
-        //         img->data[0][y*test_w + x] = img_bpg.image_array[y][3*x];
-        //         img->data[1][y*test_w + x] = img_bpg.image_array[y][3*x + 1];
-        //         img->data[2][y*test_w + x] = img_bpg.image_array[y][3*x + 2];
-        //     }
-        // }
+        img_bpg = get_array("sample-rgb-444.bpg");
+        int test_w = img_bpg.w;
+        int test_h = img_bpg.h;
+        for(int y=0; y<test_h; y++){
+            for(int x=0; x<test_w; x++){
+                // printf("y=%d, x=%d\n ", y, x);
+                // img->data[y*test_w + x] = img_bpg.image_array[y][x];
+                img->data[0][y*test_w + x] = img_bpg.image_array[y][3*x];
+                img->data[1][y*test_w + x] = img_bpg.image_array[y][3*x + 1];
+                img->data[2][y*test_w + x] = img_bpg.image_array[y][3*x + 2];
+            }
+        }
         printf("\n przepisywanie zakonczone!\n");
 
         if (!img) {
