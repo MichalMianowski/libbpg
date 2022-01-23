@@ -1438,8 +1438,12 @@ Image *read_jpeg(BPGMetaData **pmd, FILE *f,
     return img;
 }
 
-void array_read_image(uint8_t **rows, ArrayImage *img_bpg){
-    int linesize = img_bpg->w * (3 + img_bpg->alpha);
+void array_read_image(uint8_t **rows, ArrayImage *img_bpg, BPGImageFormatEnum format){
+    int linesize = img_bpg->w;
+    if(format != BPG_FORMAT_GRAY){
+        linesize = img_bpg->w * (3 + img_bpg->has_alpha);
+    }
+    
     for (int y = 0; y < img_bpg->h; y++) {
         for (int x = 0; x < linesize; x++) {
             rows[y][x] = (uint8_t)img_bpg->image_array[y][x];
@@ -1447,12 +1451,12 @@ void array_read_image(uint8_t **rows, ArrayImage *img_bpg){
     }
 }
 
-Image *read_image_array(){
+Image *read_image_array(int in_grayscale){
     int bit_depth, color_type, limited_range, premultiplied_alpha, out_bit_depth;
     Image *img;
     uint8_t **rows;
     int y, has_alpha, linesize, bpp;
-    BPGImageFormatEnum format;
+    BPGImageFormatEnum chroma_format;
     ColorConvertState cvt_s, *cvt = &cvt_s;
     
     BPGColorSpaceEnum color_space;
@@ -1460,16 +1464,22 @@ Image *read_image_array(){
 
     bit_depth = 8;
     color_space = BPG_CS_RGB;
-    format = BPG_FORMAT_444;    // jak gray to color_space=BPG_CS_YCbCr
+    chroma_format = BPG_FORMAT_444;
+    
+    if(in_grayscale){
+        color_space = BPG_CS_YCbCr;
+        chroma_format = BPG_FORMAT_GRAY;
+    }
+    
     limited_range = 0;
     premultiplied_alpha = 0;
     out_bit_depth = 8;
     
-    img_bpg = get_array("042-gray-l.bpg");
-    has_alpha = img_bpg.alpha;
+    img_bpg = get_array("pinguin-2.bpg");
+    has_alpha = img_bpg.has_alpha;
     
     img = image_alloc(img_bpg.w, img_bpg.h, 
-                    format, has_alpha, color_space, bit_depth);
+                    chroma_format, has_alpha, color_space, bit_depth);
     img->c_h_phase = 0;
     img->has_w_plane = 0;
     img->limited_range = limited_range;
@@ -1479,7 +1489,7 @@ Image *read_image_array(){
 
     rows = malloc(sizeof(rows[0]) * img->h);
 
-    if (format == BPG_FORMAT_GRAY)
+    if (chroma_format == BPG_FORMAT_GRAY)
         bpp = (1 + has_alpha) * (bit_depth / 8);
     else
         bpp = (3 + has_alpha) * (bit_depth / 8);
@@ -1489,20 +1499,15 @@ Image *read_image_array(){
         rows[y] = malloc(linesize);
     }
     
-    array_read_image(rows, &img_bpg);
+    array_read_image(rows, &img_bpg, chroma_format);
 
-    // for (y = 0; y < img->h; y++) {
-    //     free(img_bpg.image_array[y]);
-    // }
-    // free(img_bpg.image_array);
-    // free(img_bpg.alpha);
-    // free(img_bpg.h);
-    // free(img_bpg.w);
-    // free(&img_bpg);
-
+    for (y = 0; y < img->h; y++) {
+        free(img_bpg.image_array[y]);}
+    free(img_bpg.image_array);
+    
     convert_init(cvt, bit_depth, out_bit_depth, color_space, limited_range);
 
-    if (format != BPG_FORMAT_GRAY) {
+    if (chroma_format != BPG_FORMAT_GRAY) {
         int idx;
         RGBConvertFunc *convert_func;
 
@@ -2836,172 +2841,290 @@ struct option long_opts[] = {
     { NULL },
 };
 
-int main(int argc, char **argv)
-{
-    const char *infilename, *outfilename, *frame_delay_file;
+// int main(int argc, char **argv)
+// {
+//     const char *infilename, *outfilename, *frame_delay_file;
+//     Image *img;
+//     FILE *f;
+//     int c, option_index;
+//     int keep_metadata;
+//     int bit_depth, i, limited_range, premultiplied_alpha;
+//     BPGColorSpaceEnum color_space;
+//     BPGMetaData *md;
+//     BPGEncoderContext *enc_ctx;
+//     BPGEncoderParameters *p;
+
+//     p = bpg_encoder_param_alloc();
+
+//     outfilename = DEFAULT_OUTFILENAME;
+//     color_space = BPG_CS_YCbCr;
+//     keep_metadata = 0;
+//     bit_depth = DEFAULT_BIT_DEPTH;
+//     limited_range = 0;
+//     premultiplied_alpha = 0;
+//     frame_delay_file = NULL;
+    
+//     for(;;) {
+//         c = getopt_long_only(argc, argv, "q:o:hf:c:vm:b:e:a", long_opts, &option_index);
+//         if (c == -1)
+//             break;
+//         switch(c) {
+//         case 0:
+//             switch(option_index) {
+//             case 0:
+//                 p->sei_decoded_picture_hash = 1;
+//                 break;
+//             case 1:
+//                 keep_metadata = 1;
+//                 break;
+//             case 2:
+//                 p->alpha_qp = atoi(optarg);
+//                 if (p->alpha_qp < 0 || p->alpha_qp > 51) {
+//                     fprintf(stderr, "alpha_qp must be between 0 and 51\n");
+//                     exit(1);
+//                 }
+//                 break;
+//             case 3:
+//                 p->lossless = 1;
+//                 color_space = BPG_CS_RGB;
+//                 p->preferred_chroma_format = BPG_FORMAT_444;
+//                 bit_depth = 8;
+//                 limited_range = 0;
+//                 break;
+//             case 4:
+//                 limited_range = 1;
+//                 break;
+//             case 5:
+//                 premultiplied_alpha = 1;
+//                 break;
+//             case 6:
+//                 p->loop_count = strtoul(optarg, NULL, 0);
+//                 break;
+//             case 7:
+//                 p->frame_delay_num = 1;
+//                 p->frame_delay_den = strtoul(optarg, NULL, 0);
+//                 if (p->frame_delay_den == 0) {
+//                     fprintf(stderr, "invalid frame rate\n");
+//                     exit(1);
+//                 }
+//                 break;
+//             case 8:
+//                 frame_delay_file = optarg;
+//                 break;
+//             default:
+//                 goto show_help;
+//             }
+//             break;
+//         case 'h':
+//         show_help:
+//             help(1);
+//             break;
+//         case 'q':
+//             p->qp = atoi(optarg);
+//             if (p->qp < 0 || p->qp > 51) {
+//                 fprintf(stderr, "qp must be between 0 and 51\n");
+//                 exit(1);
+//             }
+//             break;
+//         case 'o':
+//             outfilename = optarg;
+//             break;
+//         case 'f':
+//             if (!strcmp(optarg, "420")) {
+//                 p->preferred_chroma_format = BPG_FORMAT_420;
+//             } else if (!strcmp(optarg, "422")) {
+//                 p->preferred_chroma_format = BPG_FORMAT_422;
+//             } else if (!strcmp(optarg, "444")) {
+//                 p->preferred_chroma_format = BPG_FORMAT_444;
+//             } else if (!strcmp(optarg, "422_video")) {
+//                 p->preferred_chroma_format = BPG_FORMAT_422_VIDEO;
+//             } else if (!strcmp(optarg, "420_video")) {
+//                 p->preferred_chroma_format = BPG_FORMAT_420_VIDEO;
+//             } else {
+//                 fprintf(stderr, "Invalid chroma format\n");
+//                 exit(1);
+//             }
+//             break;
+//         case 'c':
+//             if (!strcmp(optarg, "ycbcr")) {
+//                 color_space = BPG_CS_YCbCr;
+//             } else if (!strcmp(optarg, "rgb")) {
+//                 color_space = BPG_CS_RGB;
+//                 p->preferred_chroma_format = BPG_FORMAT_444;
+//             } else if (!strcmp(optarg, "ycgco")) {
+//                 color_space = BPG_CS_YCgCo;
+//             } else if (!strcmp(optarg, "ycbcr_bt709")) {
+//                 color_space = BPG_CS_YCbCr_BT709;
+//             } else if (!strcmp(optarg, "ycbcr_bt2020")) {
+//                 color_space = BPG_CS_YCbCr_BT2020;
+//             } else {
+//                 fprintf(stderr, "Invalid color space format\n");
+//                 exit(1);
+//             }
+//             break;
+//         case 'm':
+//             p->compress_level = atoi(optarg);
+//             if (p->compress_level < 1)
+//                 p->compress_level = 1;
+//             else if (p->compress_level > 9)
+//                 p->compress_level = 9;
+//             break;
+//         case 'b':
+//             bit_depth = atoi(optarg);
+//             if (bit_depth < 8 || bit_depth > BIT_DEPTH_MAX) {
+//                 fprintf(stderr, "Invalid bit depth (range: 8 to %d)\n",
+//                         BIT_DEPTH_MAX);
+//                 exit(1);
+//             }
+//             break;
+//         case 'v':
+//             p->verbose++;
+//             break;
+//         case 'e':
+//             for(i = 0; i < HEVC_ENCODER_COUNT; i++) {
+//                 if (!strcmp(optarg, hevc_encoder_name[i]))
+//                     break;
+//             }
+//             if (i == HEVC_ENCODER_COUNT) {
+//                 fprintf(stderr, "Unsupported encoder. Available ones are:");
+//                 for(i = 0; i < HEVC_ENCODER_COUNT; i++) {
+//                     fprintf(stderr, " %s", hevc_encoder_name[i]);
+//                 }
+//                 fprintf(stderr, "\n");
+//                 exit(1);
+//             }
+//             p->encoder_type = i;
+//             break;
+//         case 'a':
+//             p->animated = 1;
+//             break;
+//         default:
+//             exit(1);
+//         }
+//     }
+
+//     if (optind >= argc) 
+//         help(0);
+//     infilename = argv[optind];
+
+//     f = fopen(outfilename, "wb");
+//     if (!f) {
+//         perror(outfilename);
+//         exit(1);
+//     }
+
+//     enc_ctx = bpg_encoder_open(p);
+//     if (!enc_ctx) {
+//         fprintf(stderr, "Could not open BPG encoder\n");
+//         exit(1);
+//     }
+
+//     if (p->animated) {
+//         int frame_num, first_frame, frame_ticks;
+//         char filename[1024];
+//         FILE *f1;
+
+//         if (frame_delay_file) {
+//             f1 = fopen(frame_delay_file, "r");
+//             if (!f1) {
+//                 fprintf(stderr, "Could not open '%s'\n", frame_delay_file);
+//                 exit(1);
+//             }
+//         } else {
+//             f1 = NULL;
+//         }
+
+//         first_frame = 1;
+//         for(frame_num = 0; ; frame_num++) {
+//             if (get_filename_num(filename, sizeof(filename), infilename, frame_num) < 0) {
+//                 fprintf(stderr, "Invalid filename syntax: '%s'\n", infilename);
+//                 exit(1);
+//             }
+//             img = load_image(&md, filename, color_space, bit_depth, limited_range,
+//                              premultiplied_alpha);
+//             if (!img) {
+//                 if (frame_num == 0)
+//                     continue; /* accept to start at 0 or 1 */
+//                 if (first_frame) {
+//                     fprintf(stderr, "Could not read '%s'\n", filename);
+//                     exit(1);
+//                 } else {
+//                     break;
+//                 }
+//             }
+//             frame_ticks = 1;
+//             if (f1) {
+//                 float fdelay;
+//                 if (fscanf(f1, "%f", &fdelay) == 1) {
+//                     frame_ticks = lrint(fdelay * p->frame_delay_den / (p->frame_delay_num * 100));
+//                     if (frame_ticks < 1)
+//                         frame_ticks = 1;
+//                 }
+//             }
+            
+//             if (p->verbose)
+//                 printf("Encoding '%s' ticks=%d\n", filename, frame_ticks);
+            
+//             if (keep_metadata && first_frame) {
+//                 bpg_encoder_set_extension_data(enc_ctx, md);
+//             } else {
+//                 bpg_md_free(md);
+//             }
+//             bpg_encoder_set_frame_duration(enc_ctx, frame_ticks);
+//             bpg_encoder_encode(enc_ctx, img, my_write_func, f);
+//             image_free(img);
+
+//             first_frame = 0;
+//         }
+//         if (f1)
+//             fclose(f1);
+//         /* end of stream */
+//         bpg_encoder_encode(enc_ctx, NULL, my_write_func, f);
+//     } else {
+        
+//         img = read_image_array(0);
+//         if (!img) {
+//             fprintf(stderr, "Could not read '%s'\n", infilename);
+//             exit(1);
+//         }
+//         bpg_encoder_encode(enc_ctx, img, my_write_func, f);
+//         image_free(img);
+//     }
+
+//     fclose(f);
+//     bpg_encoder_close(enc_ctx);
+//     bpg_encoder_param_free(p);
+
+//     return 0;
+// }
+
+int save_bpg_image(){ //
+    const char *outfilename;
     Image *img;
     FILE *f;
-    int c, option_index;
-    int keep_metadata;
-    int bit_depth, i, limited_range, premultiplied_alpha;
-    BPGColorSpaceEnum color_space;
-    BPGMetaData *md;
+    int bit_depth, limited_range, premultiplied_alpha;
     BPGEncoderContext *enc_ctx;
     BPGEncoderParameters *p;
 
     p = bpg_encoder_param_alloc();
 
-    outfilename = DEFAULT_OUTFILENAME;
-    color_space = BPG_CS_YCbCr;
-    keep_metadata = 0;
-    bit_depth = DEFAULT_BIT_DEPTH;
-    limited_range = 0;
-    premultiplied_alpha = 0;
-    frame_delay_file = NULL;
+    // fixed settings:
+    bit_depth = 8;
+    // te z 0 mozna sobie - tak
+    // limited_range = 0;
+    // premultiplied_alpha = 0;
     
-    for(;;) {
-        c = getopt_long_only(argc, argv, "q:o:hf:c:vm:b:e:a", long_opts, &option_index);
-        if (c == -1)
-            break;
-        switch(c) {
-        case 0:
-            switch(option_index) {
-            case 0:
-                p->sei_decoded_picture_hash = 1;
-                break;
-            case 1:
-                keep_metadata = 1;
-                break;
-            case 2:
-                p->alpha_qp = atoi(optarg);
-                if (p->alpha_qp < 0 || p->alpha_qp > 51) {
-                    fprintf(stderr, "alpha_qp must be between 0 and 51\n");
-                    exit(1);
-                }
-                break;
-            case 3:
-                p->lossless = 1;
-                color_space = BPG_CS_RGB;
-                p->preferred_chroma_format = BPG_FORMAT_444;
-                bit_depth = 8;
-                limited_range = 0;
-                break;
-            case 4:
-                limited_range = 1;
-                break;
-            case 5:
-                premultiplied_alpha = 1;
-                break;
-            case 6:
-                p->loop_count = strtoul(optarg, NULL, 0);
-                break;
-            case 7:
-                p->frame_delay_num = 1;
-                p->frame_delay_den = strtoul(optarg, NULL, 0);
-                if (p->frame_delay_den == 0) {
-                    fprintf(stderr, "invalid frame rate\n");
-                    exit(1);
-                }
-                break;
-            case 8:
-                frame_delay_file = optarg;
-                break;
-            default:
-                goto show_help;
-            }
-            break;
-        case 'h':
-        show_help:
-            help(1);
-            break;
-        case 'q':
-            p->qp = atoi(optarg);
-            if (p->qp < 0 || p->qp > 51) {
-                fprintf(stderr, "qp must be between 0 and 51\n");
-                exit(1);
-            }
-            break;
-        case 'o':
-            outfilename = optarg;
-            break;
-        case 'f':
-            if (!strcmp(optarg, "420")) {
-                p->preferred_chroma_format = BPG_FORMAT_420;
-            } else if (!strcmp(optarg, "422")) {
-                p->preferred_chroma_format = BPG_FORMAT_422;
-            } else if (!strcmp(optarg, "444")) {
-                p->preferred_chroma_format = BPG_FORMAT_444;
-            } else if (!strcmp(optarg, "422_video")) {
-                p->preferred_chroma_format = BPG_FORMAT_422_VIDEO;
-            } else if (!strcmp(optarg, "420_video")) {
-                p->preferred_chroma_format = BPG_FORMAT_420_VIDEO;
-            } else {
-                fprintf(stderr, "Invalid chroma format\n");
-                exit(1);
-            }
-            break;
-        case 'c':
-            if (!strcmp(optarg, "ycbcr")) {
-                color_space = BPG_CS_YCbCr;
-            } else if (!strcmp(optarg, "rgb")) {
-                color_space = BPG_CS_RGB;
-                p->preferred_chroma_format = BPG_FORMAT_444;
-            } else if (!strcmp(optarg, "ycgco")) {
-                color_space = BPG_CS_YCgCo;
-            } else if (!strcmp(optarg, "ycbcr_bt709")) {
-                color_space = BPG_CS_YCbCr_BT709;
-            } else if (!strcmp(optarg, "ycbcr_bt2020")) {
-                color_space = BPG_CS_YCbCr_BT2020;
-            } else {
-                fprintf(stderr, "Invalid color space format\n");
-                exit(1);
-            }
-            break;
-        case 'm':
-            p->compress_level = atoi(optarg);
-            if (p->compress_level < 1)
-                p->compress_level = 1;
-            else if (p->compress_level > 9)
-                p->compress_level = 9;
-            break;
-        case 'b':
-            bit_depth = atoi(optarg);
-            if (bit_depth < 8 || bit_depth > BIT_DEPTH_MAX) {
-                fprintf(stderr, "Invalid bit depth (range: 8 to %d)\n",
-                        BIT_DEPTH_MAX);
-                exit(1);
-            }
-            break;
-        case 'v':
-            p->verbose++;
-            break;
-        case 'e':
-            for(i = 0; i < HEVC_ENCODER_COUNT; i++) {
-                if (!strcmp(optarg, hevc_encoder_name[i]))
-                    break;
-            }
-            if (i == HEVC_ENCODER_COUNT) {
-                fprintf(stderr, "Unsupported encoder. Available ones are:");
-                for(i = 0; i < HEVC_ENCODER_COUNT; i++) {
-                    fprintf(stderr, " %s", hevc_encoder_name[i]);
-                }
-                fprintf(stderr, "\n");
-                exit(1);
-            }
-            p->encoder_type = i;
-            break;
-        case 'a':
-            p->animated = 1;
-            break;
-        default:
-            exit(1);
-        }
-    }
+    // default:
+    outfilename = DEFAULT_OUTFILENAME;
 
-    if (optind >= argc) 
-        help(0);
-    infilename = argv[optind];
 
+    // pramatery:
+    outfilename;
+    p->qp; //0-51
+    p->lossless; // wtedy qp jest ignorowane, recznie dodac preferred_chroma na 444
+    p->compress_level; //1-9
+    p->preferred_chroma_format; //444 422 420
+    
     f = fopen(outfilename, "wb");
     if (!f) {
         perror(outfilename);
@@ -3014,101 +3137,31 @@ int main(int argc, char **argv)
         exit(1);
     }
 
-    if (p->animated) {
-        int frame_num, first_frame, frame_ticks;
-        char filename[1024];
-        FILE *f1;
-
-        if (frame_delay_file) {
-            f1 = fopen(frame_delay_file, "r");
-            if (!f1) {
-                fprintf(stderr, "Could not open '%s'\n", frame_delay_file);
-                exit(1);
-            }
-        } else {
-            f1 = NULL;
-        }
-
-        first_frame = 1;
-        for(frame_num = 0; ; frame_num++) {
-            if (get_filename_num(filename, sizeof(filename), infilename, frame_num) < 0) {
-                fprintf(stderr, "Invalid filename syntax: '%s'\n", infilename);
-                exit(1);
-            }
-            img = load_image(&md, filename, color_space, bit_depth, limited_range,
-                             premultiplied_alpha);
-            if (!img) {
-                if (frame_num == 0)
-                    continue; /* accept to start at 0 or 1 */
-                if (first_frame) {
-                    fprintf(stderr, "Could not read '%s'\n", filename);
-                    exit(1);
-                } else {
-                    break;
-                }
-            }
-            frame_ticks = 1;
-            if (f1) {
-                float fdelay;
-                if (fscanf(f1, "%f", &fdelay) == 1) {
-                    frame_ticks = lrint(fdelay * p->frame_delay_den / (p->frame_delay_num * 100));
-                    if (frame_ticks < 1)
-                        frame_ticks = 1;
-                }
-            }
-            
-            if (p->verbose)
-                printf("Encoding '%s' ticks=%d\n", filename, frame_ticks);
-            
-            if (keep_metadata && first_frame) {
-                bpg_encoder_set_extension_data(enc_ctx, md);
-            } else {
-                bpg_md_free(md);
-            }
-            bpg_encoder_set_frame_duration(enc_ctx, frame_ticks);
-            bpg_encoder_encode(enc_ctx, img, my_write_func, f);
-            image_free(img);
-
-            first_frame = 0;
-        }
-        if (f1)
-            fclose(f1);
-        /* end of stream */
-        bpg_encoder_encode(enc_ctx, NULL, my_write_func, f);
-    } else {
-        // img = load_image(&md, infilename, color_space, bit_depth, limited_range,
-        //                  premultiplied_alpha);
-        // printf("img 1:\n w=%d\n h=%d\n format=%d\n c_h_phase=%d\n pixel_shift=%d\n" ,
-        //  img->w, img->h, img->format, img->c_h_phase, img->pixel_shift);
-        // printf("linesize[0]=%d\n linesize[1]=%d\n linesize[2]=%d\n linesize[3]=%d\n",
-        // img->linesize[0], img->linesize[1], img->linesize[2], img->linesize[3]);
-        // Image *img2;
-        // img2 = read_image_array();
-        // printf("img2:\n w=%d\n h=%d\n format=%d\n c_h_phase=%d\n pixel_shift=%d\n" ,
-        //  img2->w, img2->h, img2->format, img2->c_h_phase, img2->pixel_shift);
-        // printf("linesize[0]=%d\n linesize[1]=%d\n linesize[2]=%d\n linesize[3]=%d\n",
-        // img2->linesize[0], img2->linesize[1], img2->linesize[2], img2->linesize[3]);
-        
-        img = read_image_array();
-        printf("image loaded\n");
-        if (!img) {
-            fprintf(stderr, "Could not read '%s'\n", infilename);
-            exit(1);
-        }
-        
-        // if (!keep_metadata && md) {
-        //     bpg_md_free(md);
-        //     md = NULL;
-        // }
-        // bpg_encoder_set_extension_data(enc_ctx, md);
-        
-        bpg_encoder_encode(enc_ctx, img, my_write_func, f);
-        image_free(img);
+    img = read_image_array(0);
+    if (!img) {
+        fprintf(stderr, "Could not read image'\n");
+        exit(1);
     }
+    bpg_encoder_encode(enc_ctx, img, my_write_func, f);
+    image_free(img);
 
     fclose(f);
     bpg_encoder_close(enc_ctx);
     bpg_encoder_param_free(p);
+        // if (!strcmp(optarg, "420")) {
+        //     p->preferred_chroma_format = BPG_FORMAT_420;
+        // } else if (!strcmp(optarg, "422")) {
+        //     p->preferred_chroma_format = BPG_FORMAT_422;
+        // } else if (!strcmp(optarg, "444")) {
+        //     p->preferred_chroma_format = BPG_FORMAT_444;
+        // }
+
+
+    return 0;
+}
+
+int main(){
+    save_bpg_image();
 
     return 0;
 }

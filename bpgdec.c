@@ -510,7 +510,7 @@ ArrayImage get_array(char *filename){
     array_image_return.image_array = image_array_returned;
     array_image_return.w = w;
     array_image_return.h = h;
-    array_image_return.alpha = alpha;
+    array_image_return.has_alpha = alpha;
 
 
     return array_image_return;

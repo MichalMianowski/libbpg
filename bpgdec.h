@@ -5,7 +5,7 @@
 
 typedef struct ArrayImage
 {
-    int w, h, alpha;
+    int w, h, has_alpha, is_grayscale;
     int ** image_array;
 } ArrayImage;
 
