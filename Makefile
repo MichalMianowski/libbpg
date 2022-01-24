@@ -247,3 +247,6 @@ clean: x265_clean
 -include $(wildcard jctvc/TLibVideoIO/*.d)
 -include $(wildcard jctvc/TLibCommon/*.d)
 -include $(wildcard jctvc/libmd5/*.d)
+
+# and compile command like this:
+# g++ -shared -o bpg_load_save_lib.so bpg_load_save_lib.c libbpg.a
