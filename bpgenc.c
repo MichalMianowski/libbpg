@@ -1438,7 +1438,7 @@ Image *read_jpeg(BPGMetaData **pmd, FILE *f,
     return img;
 }
 
-void array_read_image(uint8_t **rows, ArrayImage *img_bpg, BPGImageFormatEnum format){
+void array_read_image(uint8_t **rows, DecodedImage *img_bpg, BPGImageFormatEnum format){
     int linesize = img_bpg->w;
     if(format != BPG_FORMAT_GRAY){
         linesize = img_bpg->w * (3 + img_bpg->has_alpha);
@@ -1451,7 +1451,7 @@ void array_read_image(uint8_t **rows, ArrayImage *img_bpg, BPGImageFormatEnum fo
     }
 }
 
-Image *read_image_array(int in_grayscale){
+Image *read_image_array(int in_grayscale, DecodedImage *decoded_image){
     int bit_depth, color_type, limited_range, premultiplied_alpha, out_bit_depth;
     Image *img;
     uint8_t **rows;
@@ -1460,7 +1460,6 @@ Image *read_image_array(int in_grayscale){
     ColorConvertState cvt_s, *cvt = &cvt_s;
     
     BPGColorSpaceEnum color_space;
-    ArrayImage img_bpg;
 
     bit_depth = 8;
     color_space = BPG_CS_RGB;
@@ -1475,10 +1474,9 @@ Image *read_image_array(int in_grayscale){
     premultiplied_alpha = 0;
     out_bit_depth = 8;
     
-    img_bpg = get_array("pinguin-2.bpg");
-    has_alpha = img_bpg.has_alpha;
+    has_alpha = decoded_image->has_alpha;
     
-    img = image_alloc(img_bpg.w, img_bpg.h, 
+    img = image_alloc(decoded_image->w, decoded_image->h, 
                     chroma_format, has_alpha, color_space, bit_depth);
     img->c_h_phase = 0;
     img->has_w_plane = 0;
@@ -1499,11 +1497,7 @@ Image *read_image_array(int in_grayscale){
         rows[y] = malloc(linesize);
     }
     
-    array_read_image(rows, &img_bpg, chroma_format);
-
-    for (y = 0; y < img->h; y++) {
-        free(img_bpg.image_array[y]);}
-    free(img_bpg.image_array);
+    array_read_image(rows, decoded_image, chroma_format);
     
     convert_init(cvt, bit_depth, out_bit_depth, color_space, limited_range);
 
@@ -2335,6 +2329,8 @@ static HEVCEncoder *hevc_encoder_tab[HEVC_ENCODER_COUNT] = {
 
 #define DEFAULT_OUTFILENAME "out.bpg"
 #define DEFAULT_QP 29
+#define DEFAULT_LOSSLESS 0
+#define DEFAULT_PREFFERED_CHROMA_FORMAT 444
 #define DEFAULT_BIT_DEPTH 8
 
 #ifdef RExt__HIGH_BIT_DEPTH_SUPPORT
@@ -3098,28 +3094,57 @@ struct option long_opts[] = {
 //     return 0;
 // }
 
-int save_bpg_image(){ //
-    const char *outfilename;
+int save_bpg_image(DecodedImage *decoded_image, char *outfilename, int qp, 
+                int lossless, int compress_level, int preffered_chroma_format){  
+    if (qp < 0 || qp > 51){
+        fprintf(stderr, "qp must be between 0 and 51\n");
+        exit(1);
+    }
+    if (lossless != 0 && lossless != 1){
+        fprintf(stderr, "field lossless must be 0 or 1\n");
+        exit(1);
+    }
+    if (compress_level < 1 || compress_level > 9){
+        fprintf(stderr, "compress_level must be between 1 and 9\n");
+        exit(1);
+    }
+    if (preffered_chroma_format != 420 && preffered_chroma_format != 422 && preffered_chroma_format != 444){
+        fprintf(stderr, "preffered_chroma_format must be 420, 422 or 444\n");
+        exit(1);
+    }
+
     Image *img;
     FILE *f;
     int bit_depth, limited_range, premultiplied_alpha;
     BPGEncoderContext *enc_ctx;
     BPGEncoderParameters *p;
 
-    p = bpg_encoder_param_alloc();
-
     // fixed settings:
     bit_depth = 8;
-    // te z 0 mozna sobie - tak
-    // limited_range = 0;
-    // premultiplied_alpha = 0;
+
+    p = bpg_encoder_param_alloc();
+    p->qp = qp;
+    p->compress_level = compress_level;
+
+    if(lossless = 1){
+        p->lossless = 1;
+        p->preferred_chroma_format = BPG_FORMAT_444;
+    }
     
-    // default:
-    outfilename = DEFAULT_OUTFILENAME;
 
+    switch (preffered_chroma_format)
+    {
+    case 420:
+        p->preferred_chroma_format = BPG_FORMAT_420;
+        break;
+    case 422:
+        p->preferred_chroma_format = BPG_FORMAT_422;
+        break;
+    default:
+        p->preferred_chroma_format = BPG_FORMAT_444;
+        break;
+    }
 
-    // pramatery:
-    outfilename;
     p->qp; //0-51
     p->lossless; // wtedy qp jest ignorowane, recznie dodac preferred_chroma na 444
     p->compress_level; //1-9
@@ -3137,7 +3162,7 @@ int save_bpg_image(){ //
         exit(1);
     }
 
-    img = read_image_array(0);
+    img = read_image_array(0, decoded_image);
     if (!img) {
         fprintf(stderr, "Could not read image'\n");
         exit(1);
@@ -3148,20 +3173,25 @@ int save_bpg_image(){ //
     fclose(f);
     bpg_encoder_close(enc_ctx);
     bpg_encoder_param_free(p);
-        // if (!strcmp(optarg, "420")) {
-        //     p->preferred_chroma_format = BPG_FORMAT_420;
-        // } else if (!strcmp(optarg, "422")) {
-        //     p->preferred_chroma_format = BPG_FORMAT_422;
-        // } else if (!strcmp(optarg, "444")) {
-        //     p->preferred_chroma_format = BPG_FORMAT_444;
-        // }
-
 
     return 0;
 }
 
+int save_bpg_image_with_defaults(DecodedImage *decoded_image){
+    save_bpg_image(decoded_image, DEFAULT_OUTFILENAME, DEFAULT_QP, 
+        DEFAULT_LOSSLESS, DEFAULT_COMPRESS_LEVEL, DEFAULT_PREFFERED_CHROMA_FORMAT);
+    
+    return 0;
+}
+
 int main(){
-    save_bpg_image();
+    DecodedImage decoded_image = get_array("lena_q23.bpg");
+    save_bpg_image_with_defaults(&decoded_image);
+
+    DecodedImage *decoded_image_p = &decoded_image;
+    for (int y = 0; y < decoded_image_p->h; y++) {
+        free(decoded_image_p->image_array[y]);}
+    free(decoded_image_p->image_array);
 
     return 0;
 }

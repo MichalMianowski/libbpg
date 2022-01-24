@@ -437,7 +437,7 @@ static void help(void)
 //     return 0;
 // }
 
-ArrayImage get_array(char *filename){
+DecodedImage get_array(char *filename){
     FILE *f;
     BPGDecoderContext *img;
     uint8_t *buf;
@@ -506,7 +506,7 @@ ArrayImage get_array(char *filename){
 
     bpg_decoder_close(img);
 
-    ArrayImage array_image_return;
+    DecodedImage array_image_return;
     array_image_return.image_array = image_array_returned;
     array_image_return.w = w;
     array_image_return.h = h;

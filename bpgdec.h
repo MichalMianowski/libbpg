@@ -3,12 +3,12 @@
 
 #include "libbpg.h"
 
-typedef struct ArrayImage
+typedef struct DecodedImage
 {
     int w, h, has_alpha, is_grayscale;
     int ** image_array;
-} ArrayImage;
+} DecodedImage;
 
-ArrayImage get_array(char *filename);
+DecodedImage get_array(char *filename);
 
 #endif
