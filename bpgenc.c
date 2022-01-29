@@ -2973,3 +2973,199 @@ int main(int argc, char **argv)
 
     return 0;
 }
+
+
+// Code added by Michal Mianowski to create bpg_load_save_lib in format .so/.dll
+
+void array_read_image(uint8_t **rows, DecodedImage *img_bpg, BPGImageFormatEnum format){
+    int line_len = img_bpg->w * img_bpg->pixel_len;
+    
+    for (int y = 0; y < img_bpg->h; y++) {
+        for (int x = 0; x < line_len; x++) {
+            rows[y][x] = (uint8_t)img_bpg->raw_data[y*line_len + x];
+        }
+    }
+}
+
+Image *decoded_image_read_raw_data(DecodedImage *decoded_image){
+    int bit_depth, color_type, limited_range, premultiplied_alpha, out_bit_depth;
+    Image *img;
+    uint8_t **rows;
+    int y, has_alpha, line_len, bpp;
+    BPGImageFormatEnum chroma_format;
+    ColorConvertState cvt_s, *cvt = &cvt_s;
+    
+    BPGColorSpaceEnum color_space;
+
+    bit_depth = 8;
+    color_space = BPG_CS_RGB;
+    chroma_format = BPG_FORMAT_444;
+    
+    if(decoded_image->is_grayscale){
+        color_space = BPG_CS_YCbCr;
+        chroma_format = BPG_FORMAT_GRAY;
+    }
+    
+    limited_range = 0;
+    premultiplied_alpha = 0;
+    out_bit_depth = 8;
+    
+    has_alpha = decoded_image->has_alpha;
+    
+    img = image_alloc(decoded_image->w, decoded_image->h, 
+                    chroma_format, has_alpha, color_space, bit_depth);
+    img->c_h_phase = 0;
+    img->has_w_plane = 0;
+    img->limited_range = limited_range;
+    img->premultiplied_alpha = premultiplied_alpha;
+
+    rows = malloc(sizeof(rows[0]) * img->h);
+
+    if (chroma_format == BPG_FORMAT_GRAY)
+        bpp = (1 + has_alpha) * (bit_depth / 8);
+    else
+        bpp = (3 + has_alpha) * (bit_depth / 8);
+
+    line_len = bpp * img->w;
+    for (y = 0; y < img->h; y++) {
+        rows[y] = malloc(line_len);
+    }
+    
+    array_read_image(rows, decoded_image, chroma_format);
+    
+    convert_init(cvt, bit_depth, out_bit_depth, color_space, limited_range);
+
+    if (chroma_format != BPG_FORMAT_GRAY) {
+        int idx;
+        RGBConvertFunc *convert_func;
+
+        idx = (bit_depth == 16);
+        convert_func = rgb_to_cs[idx][color_space];
+        
+        for (y = 0; y < img->h; y++) {
+            convert_func(cvt, (PIXEL *)(img->data[0] + y * img->linesize[0]),
+                         (PIXEL *)(img->data[1] + y * img->linesize[1]),
+                         (PIXEL *)(img->data[2] + y * img->linesize[2]),
+                         rows[y], img->w, 3 + has_alpha);
+            if (has_alpha) {
+                if (idx) {
+                    gray16_to_gray(cvt, (PIXEL *)(img->data[3] + y * img->linesize[3]),
+                                   (uint16_t *)rows[y] + 3, img->w, 4);
+                } else {
+                    gray8_to_gray(cvt, (PIXEL *)(img->data[3] + y * img->linesize[3]),
+                                  rows[y] + 3, img->w, 4);
+                }
+            }
+        }
+    } else {
+        if (bit_depth == 16) {
+            for (y = 0; y < img->h; y++) {
+                luma16_to_gray(cvt, (PIXEL *)(img->data[0] + y * img->linesize[0]),
+                               (uint16_t *)rows[y], img->w, 1 + has_alpha);
+                if (has_alpha) {
+                    gray16_to_gray(cvt, (PIXEL *)(img->data[1] + y * img->linesize[1]),
+                                   (uint16_t *)rows[y] + 1, img->w, 2);
+                }
+            }
+        } else {
+            for (y = 0; y < img->h; y++) {
+                luma8_to_gray(cvt, (PIXEL *)(img->data[0] + y * img->linesize[0]),
+                              rows[y], img->w, 1 + has_alpha);
+                if (has_alpha) {
+                    gray8_to_gray(cvt, (PIXEL *)(img->data[1] + y * img->linesize[1]),
+                                  rows[y] + 1, img->w, 2);
+                }
+            }
+        }
+    }
+    
+    for (y = 0; y < img->h; y++) {
+        free(rows[y]);
+    }
+    free(rows);
+
+    return img;
+}
+
+
+int save_bpg_image(DecodedImage *decoded_image, char *outfilename, int qp, 
+                int lossless, int compress_level, int preffered_chroma_format){  
+    if (qp < 0 || qp > 51){
+        fprintf(stderr, "qp must be between 0 and 51\n");
+        return 1;
+    }
+    if (lossless != 0 && lossless != 1){
+        fprintf(stderr, "field lossless must be 0 or 1\n");
+        return 2;
+    }
+    if (compress_level < 1 || compress_level > 9){
+        fprintf(stderr, "compress_level must be between 1 and 9\n");
+        return 3;
+    }
+    if (preffered_chroma_format != 420 && preffered_chroma_format != 422 && preffered_chroma_format != 444){
+        fprintf(stderr, "preffered_chroma_format must be 420, 422 or 444\n");
+        return 4;
+    }
+
+    Image *img;
+    FILE *f;
+    int bit_depth, limited_range, premultiplied_alpha;
+    BPGEncoderContext *enc_ctx;
+    BPGEncoderParameters *p;
+
+    // fixed settings:
+    bit_depth = 8;
+
+    p = bpg_encoder_param_alloc();
+    p->qp = qp;
+    p->compress_level = compress_level;
+
+    if(lossless = 1){
+        p->lossless = 1;
+        p->preferred_chroma_format = BPG_FORMAT_444;
+    }
+    
+    switch (preffered_chroma_format)
+    {
+    case 420:
+        p->preferred_chroma_format = BPG_FORMAT_420;
+        break;
+    case 422:
+        p->preferred_chroma_format = BPG_FORMAT_422;
+        break;
+    default:
+        p->preferred_chroma_format = BPG_FORMAT_444;
+        break;
+    }
+
+    p->qp; //0-51
+    p->lossless; // when 1 then qp is ignored and preferred_chroma_format should be manually set to 444 
+    p->compress_level; //1-9
+    p->preferred_chroma_format; //444 422 420
+    
+    f = fopen(outfilename, "wb");
+    if (!f) {
+        perror(outfilename);
+        exit(1);
+    }
+
+    enc_ctx = bpg_encoder_open(p);
+    if (!enc_ctx) {
+        fprintf(stderr, "Could not open BPG encoder\n");
+        exit(1);
+    }
+
+    img = decoded_image_read_raw_data(decoded_image);
+    if (!img) {
+        fprintf(stderr, "Could not read image'\n");
+        exit(1);
+    }
+    bpg_encoder_encode(enc_ctx, img, my_write_func, f);
+    image_free(img);
+
+    fclose(f);
+    bpg_encoder_close(enc_ctx);
+    bpg_encoder_param_free(p);
+
+    return 0;
+}

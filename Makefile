@@ -2,20 +2,22 @@
 # 
 # Compile options:
 #
+# Enable the JCTVC code (best quality but slow) for the encoder
+USE_JCTVC=y
+
+# Enable the cross compilation for Windows
+# CONFIG_WIN32=y
+# Enable for compilation on MacOS X
+#CONFIG_APPLE=y
+
 # Enable compilation of Javascript decoder with Emscripten
 #USE_EMCC=y
 # Enable x265 for the encoder
-USE_X265=y
-# Enable the JCTVC code (best quality but slow) for the encoder
-#USE_JCTVC=y
+# USE_X265=y
 # Compile bpgview (SDL and SDL_image libraries needed)
-USE_BPGVIEW=y
+# USE_BPGVIEW=y
 # Enable it to use bit depths > 12 (need more tests to validate encoder)
 #USE_JCTVC_HIGH_BIT_DEPTH=y
-# Enable the cross compilation for Windows
-#CONFIG_WIN32=y
-# Enable for compilation on MacOS X
-#CONFIG_APPLE=y
 # Installation prefix
 prefix=/usr/local
 
@@ -38,7 +40,7 @@ EMCC=emcc
 
 PWD:=$(shell pwd)
 
-CFLAGS:= -Os -Wall -MMD -fPIC -fno-asynchronous-unwind-tables -fdata-sections -ffunction-sections -fno-math-errno -fno-signed-zeros -fno-tree-vectorize -fomit-frame-pointer
+CFLAGS:=-Os -Wall -fPIC -MMD -fno-asynchronous-unwind-tables -fdata-sections -ffunction-sections -fno-math-errno -fno-signed-zeros -fno-tree-vectorize -fomit-frame-pointer
 CFLAGS+=-D_FILE_OFFSET_BITS=64 -D_LARGEFILE_SOURCE -D_REENTRANT
 CFLAGS+=-I.
 CFLAGS+=-DCONFIG_BPG_VERSION=\"$(shell cat VERSION)\"
@@ -71,7 +73,7 @@ ifdef USE_EMCC
 PROGS+=bpgdec.js bpgdec8.js bpgdec8a.js
 endif
 
-all: $(PROGS)
+all: $(PROGS) lib_bpg
 
 LIBBPG_OBJS:=$(addprefix libavcodec/, \
 hevc_cabac.o  hevc_filter.o  hevc.o         hevcpred.o  hevc_refs.o\
@@ -153,14 +155,14 @@ TComPicYuvMD5.o TComRdCost.o TComPattern.o TComCABACTables.o)
 JCTVC_OBJS+=jctvc/libmd5/libmd5.o
 JCTVC_OBJS+=jctvc/TAppEncCfg.o jctvc/TAppEncTop.o jctvc/program_options_lite.o 
 
-$(JCTVC_OBJS) jctvc_glue.o: CFLAGS+=-I$(PWD)/jctvc -Wno-sign-compare
+$(JCTVC_OBJS) jctvc_glue.o: CFLAGS+= -fPIC -I$(PWD)/jctvc -Wno-sign-compare
 
 jctvc/libjctvc.a: $(JCTVC_OBJS)
 	$(AR) rcs $@ $^
 
 BPGENC_OBJS+=jctvc_glue.o jctvc/libjctvc.a
 
-bpgenc.o: CFLAGS+=-DUSE_JCTVC
+bpgenc.o: CFLAGS+=-DUSE_JCTVC -fPIC
 endif # USE_JCTVC
 
 
@@ -193,28 +195,29 @@ libbpg.a: $(LIBBPG_OBJS)
 bpgdec$(EXE): bpgdec.o libbpg.a
 	$(CC) $(LDFLAGS) -o $@ $^ $(BPGDEC_LIBS)
 
-bpgenc$(EXE): $(BPGENC_OBJS)
+bpgenc$(EXE): $(BPGENC_OBJS) libbpg.a
 	$(CXX) $(LDFLAGS) -o $@ $^ $(BPGENC_LIBS)
 
 bpgview$(EXE): bpgview.o libbpg.a
 	$(CC) $(LDFLAGS) -o $@ $^ $(BPGVIEW_LIBS)
 
-bpgdec.js: $(LIBBPG_JS_OBJS) post.js
-	$(EMCC) $(EMLDFLAGS) -s TOTAL_MEMORY=33554432 -o $@ $(LIBBPG_JS_OBJS)
 
-bpgdec8.js: $(LIBBPG_JS8_OBJS) post.js
-	$(EMCC) $(EMLDFLAGS) -s TOTAL_MEMORY=33554432 -o $@ $(LIBBPG_JS8_OBJS)
+# bpgdec.js: $(LIBBPG_JS_OBJS) post.js
+# 	$(EMCC) $(EMLDFLAGS) -s TOTAL_MEMORY=33554432 -o $@ $(LIBBPG_JS_OBJS)
 
-bpgdec8a.js: $(LIBBPG_JS8A_OBJS) post.js
-	$(EMCC) $(EMLDFLAGS) -s TOTAL_MEMORY=33554432 -o $@ $(LIBBPG_JS8A_OBJS)
+# bpgdec8.js: $(LIBBPG_JS8_OBJS) post.js
+# 	$(EMCC) $(EMLDFLAGS) -s TOTAL_MEMORY=33554432 -o $@ $(LIBBPG_JS8_OBJS)
 
-size:
-	strip bpgdec
-	size bpgdec libbpg.o libavcodec/*.o libavutil/*.o | sort -n
-	gzip < bpgdec | wc
+# bpgdec8a.js: $(LIBBPG_JS8A_OBJS) post.js
+# 	$(EMCC) $(EMLDFLAGS) -s TOTAL_MEMORY=33554432 -o $@ $(LIBBPG_JS8A_OBJS)
 
-install: bpgenc bpgdec
-	install -s -m 755 $^ $(prefix)/bin
+# size:
+# 	strip bpgdec
+# 	size bpgdec libbpg.o libavcodec/*.o libavutil/*.o | sort -n
+# 	gzip < bpgdec | wc
+
+# install: bpgenc bpgdec
+# 	install -s -m 755 $^ $(prefix)/bin
 
 CLEAN_DIRS=doc html libavcodec libavutil \
      jctvc jctvc/TLibEncoder jctvc/TLibVideoIO jctvc/TLibCommon jctvc/libmd5
@@ -224,20 +227,20 @@ clean: x265_clean
           $(addsuffix /*.d, $(CLEAN_DIRS)) $(addsuffix /*~, $(CLEAN_DIRS)) \
           $(addsuffix /*.a, $(CLEAN_DIRS))
 
-%.o: %.c
-	$(CC) $(CFLAGS) -c -o $@ $<
+# %.o: %.c
+# 	$(CC) $(CFLAGS) -c -o $@ $<
 
-%.o: %.cpp
-	$(CXX) $(CXXFLAGS) -c -o $@ $<
+# %.o: %.cpp
+# 	$(CXX) $(CXXFLAGS) -c -o $@ $<
 
-%.js.o: %.c
-	$(EMCC) $(EMCFLAGS) -c -o $@ $<
+# %.js.o: %.c
+# 	$(EMCC) $(EMCFLAGS) -c -o $@ $<
 
-%.js8.o: %.c
-	$(EMCC) $(EMCFLAGS) -c -o $@ $<
+# %.js8.o: %.c
+# 	$(EMCC) $(EMCFLAGS) -c -o $@ $<
 
-%.js8a.o: %.c
-	$(EMCC) $(EMCFLAGS) -c -o $@ $<
+# %.js8a.o: %.c
+# 	$(EMCC) $(EMCFLAGS) -c -o $@ $<
 
 -include $(wildcard *.d)
 -include $(wildcard libavcodec/*.d)
@@ -247,3 +250,15 @@ clean: x265_clean
 -include $(wildcard jctvc/TLibVideoIO/*.d)
 -include $(wildcard jctvc/TLibCommon/*.d)
 -include $(wildcard jctvc/libmd5/*.d)
+
+
+# command to compile lib .so/.lib using encoding jctvc
+ifdef CONFIG_WIN32
+LIB_SUFIX:=dll
+else
+LIB_SUFIX:=so
+endif
+
+lib_bpg:
+	$(CROSS_PREFIX)gcc -Os -Wall -fPIC -MMD -fno-asynchronous-unwind-tables -fdata-sections -ffunction-sections -fno-math-errno -fno-signed-zeros -fno-tree-vectorize -fomit-frame-pointer -D_FILE_OFFSET_BITS=64 -D_LARGEFILE_SOURCE -D_REENTRANT -I. -DCONFIG_BPG_VERSION=\"0.9.8\" -g   -c -o bpg_load_save_lib.o bpg_load_save_lib.c 
+	$(CROSS_PREFIX)g++ -g -Wl,--gc-sections -shared -o bpg_load_save_lib.$(LIB_SUFIX) bpg_load_save_lib.o bpgenc.o jctvc_glue.o jctvc/libjctvc.a libbpg.a -lpng -ljpeg -lz 
