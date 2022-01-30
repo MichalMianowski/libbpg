@@ -6,7 +6,7 @@
 USE_JCTVC=y
 
 # Enable the cross compilation for Windows
-# CONFIG_WIN32=y
+CONFIG_WIN32=y
 # Enable for compilation on MacOS X
 #CONFIG_APPLE=y
 
@@ -168,9 +168,9 @@ endif # USE_JCTVC
 
 ifdef CONFIG_WIN32
 
-BPGDEC_LIBS:=-lpng -lz
-BPGENC_LIBS+=-lpng -ljpeg -lz
-BPGVIEW_LIBS:=-lmingw32 -lSDLmain -lSDL_image -lSDL -mwindows
+# BPGDEC_LIBS:=-lpng -lz
+# BPGENC_LIBS+=-lpng -ljpeg -lz
+# BPGVIEW_LIBS:=-lmingw32 -lSDLmain -lSDL_image -lSDL -mwindows
 
 else
 
@@ -181,9 +181,9 @@ LIBS:=-lrt
 endif # !CONFIG_APPLE 
 LIBS+=-lm -lpthread
 
-BPGDEC_LIBS:=-lpng $(LIBS)
-BPGENC_LIBS+=-lpng -ljpeg $(LIBS)
-BPGVIEW_LIBS:=-lSDL_image -lSDL $(LIBS)
+# BPGDEC_LIBS:=-lpng $(LIBS)
+# BPGENC_LIBS+=-lpng -ljpeg $(LIBS)
+# BPGVIEW_LIBS:=-lSDL_image -lSDL $(LIBS)
 
 endif #!CONFIG_WIN32
 
@@ -260,5 +260,7 @@ LIB_SUFIX:=so
 endif
 
 lib_bpg:
+	# $(CROSS_PREFIX)gcc -Os -Wall -fPIC -MMD -fno-asynchronous-unwind-tables -fdata-sections -ffunction-sections -fno-math-errno -fno-signed-zeros -fno-tree-vectorize -fomit-frame-pointer -D_FILE_OFFSET_BITS=64 -D_LARGEFILE_SOURCE -D_REENTRANT -I. -DCONFIG_BPG_VERSION=\"0.9.8\" -g   -c -o bpg_load_save_lib.o bpg_load_save_lib.c 
+	# $(CROSS_PREFIX)g++ -g -Wl,--gc-sections -shared -o bpg_load_save_lib.$(LIB_SUFIX) bpg_load_save_lib.o bpgenc.o jctvc_glue.o jctvc/libjctvc.a libbpg.a -lpng -ljpeg -lz 
 	$(CROSS_PREFIX)gcc -Os -Wall -fPIC -MMD -fno-asynchronous-unwind-tables -fdata-sections -ffunction-sections -fno-math-errno -fno-signed-zeros -fno-tree-vectorize -fomit-frame-pointer -D_FILE_OFFSET_BITS=64 -D_LARGEFILE_SOURCE -D_REENTRANT -I. -DCONFIG_BPG_VERSION=\"0.9.8\" -g   -c -o bpg_load_save_lib.o bpg_load_save_lib.c 
-	$(CROSS_PREFIX)g++ -g -Wl,--gc-sections -shared -o bpg_load_save_lib.$(LIB_SUFIX) bpg_load_save_lib.o bpgenc.o jctvc_glue.o jctvc/libjctvc.a libbpg.a -lpng -ljpeg -lz 
+	$(CROSS_PREFIX)g++ -g -Wl,--gc-sections -shared -o bpg_load_save_lib.$(LIB_SUFIX) bpg_load_save_lib.o bpgenc.o jctvc_glue.o jctvc/libjctvc.a libbpg.a
