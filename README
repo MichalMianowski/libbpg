@@ -1,3 +1,25 @@
+This repo is fork of libbpg of Febrice Bellard's
+Here you have code to compile dinamic library for Linux and Windows (.so/.dll)
+with basic functions: load and save BPG file
+extension of this project is cross platform image viewer using bpg.py plugin to imageIO
+(link here: https://github.com/MichalMianowski/bpg_cross_platf_viewer)
+In compilation is used encoder JCTVC
+
+Dependecies (some of the can be not necessary):
+make cmake gcc g++ yasm libsdl-dev libsdl-image1.2-dev 
+
+To compile code for Windows uncomment flag CONFIG_WIN32=y add also install: 
+g++-mingw-w64 mingw-w64-{tools,x86-64-dev} 
+
+Dinamic library offers encoding with limited parameters (according to Bellard's library):
+- outfilename
+- qp
+- lossless
+- compress_level
+- preffered_chroma_format
+
+
+Read also README from original source:
 BPG Image library and utilities
 -------------------------------
 
