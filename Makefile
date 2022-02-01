@@ -6,7 +6,7 @@
 USE_JCTVC=y
 
 # Enable the cross compilation for Windows
-CONFIG_WIN32=y
+#CONFIG_WIN32=y
 # Enable for compilation on MacOS X
 #CONFIG_APPLE=y
 
@@ -65,7 +65,7 @@ endif
 CFLAGS+=-g
 CXXFLAGS=$(CFLAGS)
 
-PROGS=bpgdec$(EXE) bpgenc.dll
+PROGS=bpgdec$(EXE) bpgenc$(EXE)
 ifdef USE_BPGVIEW
 PROGS+=bpgview$(EXE)
 endif
@@ -73,7 +73,7 @@ ifdef USE_EMCC
 PROGS+=bpgdec.js bpgdec8.js bpgdec8a.js
 endif
 
-all: $(PROGS) lib_bpg
+all: bpgenc$(EXE) lib_bpg
 
 LIBBPG_OBJS:=$(addprefix libavcodec/, \
 hevc_cabac.o  hevc_filter.o  hevc.o         hevcpred.o  hevc_refs.o\
@@ -195,7 +195,7 @@ libbpg.a: $(LIBBPG_OBJS)
 bpgdec$(EXE): bpgdec.o libbpg.a
 	$(CC) $(LDFLAGS) -o $@ $^ $(BPGDEC_LIBS)
 
-bpgenc.dll: $(BPGENC_OBJS) libbpg.a
+bpgenc$(EXE): $(BPGENC_OBJS) libbpg.a
 	$(CXX) $(LDFLAGS) -shared -o $@ $^ $(BPGENC_LIBS)
 
 bpgview$(EXE): bpgview.o libbpg.a
@@ -252,25 +252,14 @@ clean: x265_clean
 -include $(wildcard jctvc/libmd5/*.d)
 
 
-# command to compile lib .so/.lib using encoding jctvc
-ifdef CONFIG_WIN32
-LIB_SUFIX:=dll
-else
-LIB_SUFIX:=so
-endif
+# command to compile lib .so/.dll using encoding jctvc
 
+ifdef CONFIG_WIN32
 lib_bpg:
 	$(CC) -Os -Wall -lstdc++ -fPIC -D_FILE_OFFSET_BITS=64 -D_LARGEFILE_SOURCE -D_REENTRANT -I. -DCONFIG_BPG_VERSION=\"0.9.8\" -g -DUSE_JCTVC -fPIC -c -o bpg_load_save_lib.o bpg_load_save_lib.c 
-	$(CXX) $(LDFLAGS) -shared -o bpg_load_save_lib.$(LIB_SUFIX) bpg_load_save_lib.o bpgenc.o jctvc_glue.o jctvc/libjctvc.a libbpg.a
-	
-
-
-# $(CROSS_PREFIX)gcc -Os -Wall -fPIC -MMD -fno-asynchronous-unwind-tables -fdata-sections -ffunction-sections -fno-math-errno -fno-signed-zeros -fno-tree-vectorize -fomit-frame-pointer -D_FILE_OFFSET_BITS=64 -D_LARGEFILE_SOURCE -D_REENTRANT -I. -DCONFIG_BPG_VERSION=\"0.9.8\" -g   -c -o bpg_load_save_lib.o bpg_load_save_lib.c 
-# $(CROSS_PREFIX)g++ -g -Wl,--gc-sections -shared -o bpg_load_save_lib.$(LIB_SUFIX) bpg_load_save_lib.o bpgenc.o jctvc_glue.o jctvc/libjctvc.a libbpg.a -lpng -ljpeg -lz 
-
-# $(CC) -Os -Wall -fPIC -MMD -fno-asynchronous-unwind-tables -fdata-sections -ffunction-sections -fno-math-errno -fno-signed-zeros -fno-tree-vectorize -fomit-frame-pointer -D_FILE_OFFSET_BITS=64 -D_LARGEFILE_SOURCE -D_REENTRANT -I. -DCONFIG_BPG_VERSION=\"0.9.8\" -g   -c -o bpg_load_save_lib.o bpg_load_save_lib.c 
-# $(CXX) -g -Wl,--gc-sections -shared -o bpg_load_save_lib.$(LIB_SUFIX) bpg_load_save_lib.o bpgenc.o jctvc_glue.o jctvc/libjctvc.a libbpg.a
-
-
-# $(CC) $(LDFLAGS) -fPIC -o bpg_load_save_lib.o bpg_load_save_lib.c libbpg.a bpgenc.o jctvc_glue.o jctvc/libjctvc.a
-# $(CXX) $(LDFLAGS) -shared -o bpg_load_save_lib.$(LIB_SUFIX) bpg_load_save_lib.o bpgenc.o jctvc_glue.o jctvc/libjctvc.a libbpg.a  $(BPGENC_LIBS)
+	$(CXX) $(LDFLAGS) -static -shared -o bpg_load_save_lib.dll bpg_load_save_lib.o bpgenc.o jctvc_glue.o jctvc/libjctvc.a libbpg.a
+else
+lib_bpg:
+	$(CC) -Os -Wall -fPIC -MMD -fno-asynchronous-unwind-tables -fdata-sections -ffunction-sections -fno-math-errno -fno-signed-zeros -fno-tree-vectorize -fomit-frame-pointer -D_FILE_OFFSET_BITS=64 -D_LARGEFILE_SOURCE -D_REENTRANT -I. -DCONFIG_BPG_VERSION=\"0.9.8\" -g   -c -o bpg_load_save_lib.o bpg_load_save_lib.c 
+	$(CXX) -g -Wl,--gc-sections -shared -o bpg_load_save_lib.so bpg_load_save_lib.o bpgenc.o jctvc_glue.o jctvc/libjctvc.a libbpg.a
+endif
