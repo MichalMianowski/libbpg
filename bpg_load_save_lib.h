@@ -23,8 +23,17 @@ int save_bpg_image_with_defaults(DecodedImage *decoded_image);
 * typedef struct DecodedImage
 * {
 *     int w, h, pixel_len, has_alpha, is_grayscale;
-*     int * image_array;
+*     int * raw_data;
 * } DecodedImage;
+*
+*
+*
+*arguments of save_bpg_image function
+*    qp : set quantizer parameter (smaller gives better quality, range: 0-51
+*    lossless : enable lossless mode, values 0 or 1
+*    compress_level : select the compression level (1=fast, 9=slow)
+*    preferred_chroma_format : set preferred chroma format for output file
+*        possible values: 444, 422 or 420
 *
 * int save_bpg_image(DecodedImage *decoded_image, char *outfilename, int qp, 
 *                 int lossless, int compress_level, int preffered_chroma_format);

@@ -29,8 +29,8 @@
 #include <math.h>
 #include <assert.h>
 
-#include <png.h>
-#include <jpeglib.h>
+// #include <png.h>
+// #include <jpeglib.h>
 
 #include "bpgenc.h"
 
@@ -916,6 +916,7 @@ void bpg_md_free(BPGMetaData *md)
     }
 }
 
+/*
 Image *read_png(BPGMetaData **pmd,
                 FILE *f, BPGColorSpaceEnum color_space, int out_bit_depth,
                 int limited_range, int premultiplied_alpha)
@@ -1067,7 +1068,7 @@ Image *read_png(BPGMetaData **pmd,
         
     png_read_end(png_ptr, info_ptr);
     
-    /* get the ICC profile if present */
+    // get the ICC profile if present
     first_md = NULL;
     plast_md = &first_md;
     {
@@ -1163,7 +1164,7 @@ static BPGMetaData *jpeg_get_metadata(jpeg_saved_marker_ptr first_marker)
 
     if (iccp_chunk_count != 0) {
         int len, hlen, idx;
-        /* check that no chunk are missing */
+        // check that no chunk are missing //
         len = 0;
         hlen = sizeof(app2_iccp) + 2;
         for(i = 0; i < iccp_chunk_count; i++) {
@@ -1375,7 +1376,7 @@ Image *read_jpeg(BPGMetaData **pmd, FILE *f,
                                     img->linesize[idx] * (y1 + i));
                     gray8_to_gray(cvt, ptr, rows[c_idx][i], w1, 1);
                     if (color_space == BPG_CS_YCbCr && has_w_plane) {
-                        /* negate color */
+                        // negate color
                         if (c_idx == 0) {
                             gray_one_minus(cvt, ptr, w1);
                         } else if (c_idx <= 2) {
@@ -1453,8 +1454,8 @@ Image *load_image(BPGMetaData **pmd, const char *infilename,
     }
     
     if (is_png) {
-        img = read_png(&md, f, color_space, bit_depth, limited_range,
-                       premultiplied_alpha);
+        // img = read_png(&md, f, color_space, bit_depth, limited_range,
+        //                premultiplied_alpha);
     } else {
         img = read_jpeg(&md, f, bit_depth);
     }
@@ -1462,6 +1463,7 @@ Image *load_image(BPGMetaData **pmd, const char *infilename,
     *pmd = md;
     return img;
 }
+*/
 
 void save_yuv1(Image *img, FILE *f)
 {
@@ -2709,6 +2711,7 @@ struct option long_opts[] = {
 
 int main(int argc, char **argv)
 {
+    /*
     const char *infilename, *outfilename, *frame_delay_file;
     Image *img;
     FILE *f;
@@ -2910,7 +2913,7 @@ int main(int argc, char **argv)
                              premultiplied_alpha);
             if (!img) {
                 if (frame_num == 0)
-                    continue; /* accept to start at 0 or 1 */
+                    continue; // accept to start at 0 or 1
                 if (first_frame) {
                     fprintf(stderr, "Could not read '%s'\n", filename);
                     exit(1);
@@ -2944,7 +2947,7 @@ int main(int argc, char **argv)
         }
         if (f1)
             fclose(f1);
-        /* end of stream */
+        // end of stream 
         bpg_encoder_encode(enc_ctx, NULL, my_write_func, f);
     } else {
         img = load_image(&md, infilename, color_space, bit_depth, limited_range,
@@ -2970,7 +2973,8 @@ int main(int argc, char **argv)
     bpg_encoder_close(enc_ctx);
     
     bpg_encoder_param_free(p);
-
+    */
+   
     return 0;
 }
 

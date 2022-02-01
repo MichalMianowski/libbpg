@@ -6,7 +6,7 @@
 USE_JCTVC=y
 
 # Enable the cross compilation for Windows
-# CONFIG_WIN32=y
+#CONFIG_WIN32=y
 # Enable for compilation on MacOS X
 #CONFIG_APPLE=y
 
@@ -26,7 +26,7 @@ prefix=/usr/local
 
 ifdef CONFIG_WIN32
 CROSS_PREFIX:=x86_64-w64-mingw32-
-#CROSS_PREFIX=i686-w64-mingw32-
+# CROSS_PREFIX=i686-w64-mingw32-
 EXE:=.exe
 else
 CROSS_PREFIX:=
@@ -40,7 +40,7 @@ EMCC=emcc
 
 PWD:=$(shell pwd)
 
-CFLAGS:=-Os -Wall -fPIC -MMD -fno-asynchronous-unwind-tables -fdata-sections -ffunction-sections -fno-math-errno -fno-signed-zeros -fno-tree-vectorize -fomit-frame-pointer
+CFLAGS:=-Os -Wall -fPIC -lstdc++ -fpermissive -MMD -fno-asynchronous-unwind-tables -fdata-sections -ffunction-sections -fno-math-errno -fno-signed-zeros -fno-tree-vectorize -fomit-frame-pointer
 CFLAGS+=-D_FILE_OFFSET_BITS=64 -D_LARGEFILE_SOURCE -D_REENTRANT
 CFLAGS+=-I.
 CFLAGS+=-DCONFIG_BPG_VERSION=\"$(shell cat VERSION)\"
@@ -73,7 +73,7 @@ ifdef USE_EMCC
 PROGS+=bpgdec.js bpgdec8.js bpgdec8a.js
 endif
 
-all: $(PROGS) lib_bpg
+all: bpgenc$(EXE) lib_bpg
 
 LIBBPG_OBJS:=$(addprefix libavcodec/, \
 hevc_cabac.o  hevc_filter.o  hevc.o         hevcpred.o  hevc_refs.o\
@@ -155,22 +155,22 @@ TComPicYuvMD5.o TComRdCost.o TComPattern.o TComCABACTables.o)
 JCTVC_OBJS+=jctvc/libmd5/libmd5.o
 JCTVC_OBJS+=jctvc/TAppEncCfg.o jctvc/TAppEncTop.o jctvc/program_options_lite.o 
 
-$(JCTVC_OBJS) jctvc_glue.o: CFLAGS+= -fPIC -I$(PWD)/jctvc -Wno-sign-compare
+$(JCTVC_OBJS) jctvc_glue.o: CFLAGS+= -lstdc++ -fPIC -fno-exceptions -I$(PWD)/jctvc -Wno-sign-compare
 
 jctvc/libjctvc.a: $(JCTVC_OBJS)
 	$(AR) rcs $@ $^
 
 BPGENC_OBJS+=jctvc_glue.o jctvc/libjctvc.a
 
-bpgenc.o: CFLAGS+=-DUSE_JCTVC -fPIC
+bpgenc.o: CFLAGS+=-DUSE_JCTVC -fPIC -fno-exceptions
 endif # USE_JCTVC
 
 
 ifdef CONFIG_WIN32
 
-BPGDEC_LIBS:=-lpng -lz
-BPGENC_LIBS+=-lpng -ljpeg -lz
-BPGVIEW_LIBS:=-lmingw32 -lSDLmain -lSDL_image -lSDL -mwindows
+# BPGDEC_LIBS:=-lpng -lz
+# BPGENC_LIBS+=-lpng -ljpeg -lz
+# BPGVIEW_LIBS:=-lmingw32 -lSDLmain -lSDL_image -lSDL -mwindows
 
 else
 
@@ -181,9 +181,9 @@ LIBS:=-lrt
 endif # !CONFIG_APPLE 
 LIBS+=-lm -lpthread
 
-BPGDEC_LIBS:=-lpng $(LIBS)
-BPGENC_LIBS+=-lpng -ljpeg $(LIBS)
-BPGVIEW_LIBS:=-lSDL_image -lSDL $(LIBS)
+# BPGDEC_LIBS:=-lpng $(LIBS)
+# BPGENC_LIBS+=-lpng -ljpeg $(LIBS)
+# BPGVIEW_LIBS:=-lSDL_image -lSDL $(LIBS)
 
 endif #!CONFIG_WIN32
 
@@ -196,7 +196,7 @@ bpgdec$(EXE): bpgdec.o libbpg.a
 	$(CC) $(LDFLAGS) -o $@ $^ $(BPGDEC_LIBS)
 
 bpgenc$(EXE): $(BPGENC_OBJS) libbpg.a
-	$(CXX) $(LDFLAGS) -o $@ $^ $(BPGENC_LIBS)
+	$(CXX) $(LDFLAGS) -shared -o $@ $^ $(BPGENC_LIBS)
 
 bpgview$(EXE): bpgview.o libbpg.a
 	$(CC) $(LDFLAGS) -o $@ $^ $(BPGVIEW_LIBS)
@@ -252,13 +252,14 @@ clean: x265_clean
 -include $(wildcard jctvc/libmd5/*.d)
 
 
-# command to compile lib .so/.lib using encoding jctvc
-ifdef CONFIG_WIN32
-LIB_SUFIX:=dll
-else
-LIB_SUFIX:=so
-endif
+# command to compile lib .so/.dll using encoding jctvc
 
+ifdef CONFIG_WIN32
 lib_bpg:
-	$(CROSS_PREFIX)gcc -Os -Wall -fPIC -MMD -fno-asynchronous-unwind-tables -fdata-sections -ffunction-sections -fno-math-errno -fno-signed-zeros -fno-tree-vectorize -fomit-frame-pointer -D_FILE_OFFSET_BITS=64 -D_LARGEFILE_SOURCE -D_REENTRANT -I. -DCONFIG_BPG_VERSION=\"0.9.8\" -g   -c -o bpg_load_save_lib.o bpg_load_save_lib.c 
-	$(CROSS_PREFIX)g++ -g -Wl,--gc-sections -shared -o bpg_load_save_lib.$(LIB_SUFIX) bpg_load_save_lib.o bpgenc.o jctvc_glue.o jctvc/libjctvc.a libbpg.a -lpng -ljpeg -lz 
+	$(CC) -Os -Wall -lstdc++ -fPIC -D_FILE_OFFSET_BITS=64 -D_LARGEFILE_SOURCE -D_REENTRANT -I. -DCONFIG_BPG_VERSION=\"0.9.8\" -g -DUSE_JCTVC -fPIC -c -o bpg_load_save_lib.o bpg_load_save_lib.c 
+	$(CXX) $(LDFLAGS) -static -shared -o bpg_load_save_lib.dll bpg_load_save_lib.o bpgenc.o jctvc_glue.o jctvc/libjctvc.a libbpg.a
+else
+lib_bpg:
+	$(CC) -Os -Wall -fPIC -MMD -fno-asynchronous-unwind-tables -fdata-sections -ffunction-sections -fno-math-errno -fno-signed-zeros -fno-tree-vectorize -fomit-frame-pointer -D_FILE_OFFSET_BITS=64 -D_LARGEFILE_SOURCE -D_REENTRANT -I. -DCONFIG_BPG_VERSION=\"0.9.8\" -g   -c -o bpg_load_save_lib.o bpg_load_save_lib.c 
+	$(CXX) -g -Wl,--gc-sections -shared -o bpg_load_save_lib.so bpg_load_save_lib.o bpgenc.o jctvc_glue.o jctvc/libjctvc.a libbpg.a
+endif

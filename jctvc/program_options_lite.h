@@ -49,19 +49,19 @@ namespace df
   {
     struct Options;
 
-    struct ParseFailure : public std::exception
-    {
-      ParseFailure(std::string arg0, std::string val0) throw()
-      : arg(arg0), val(val0)
-      {}
+    // struct ParseFailure : public std::exception
+    // {
+    //   ParseFailure(std::string arg0, std::string val0) throw()
+    //   : arg(arg0), val(val0)
+    //   {}
 
-      ~ParseFailure() throw() {};
+    //   ~ParseFailure() throw() {};
 
-      std::string arg;
-      std::string val;
+    //   std::string arg;
+    //   std::string val;
 
-      const char* what() const throw() { return "Option Parse Failure"; }
-    };
+    //   const char* what() const throw() { return "Option Parse Failure"; }
+    // };
 
     void doHelp(std::ostream& out, Options& opts, unsigned columns = 80);
     unsigned parseGNU(Options& opts, unsigned argc, const char* argv[]);
@@ -118,15 +118,16 @@ namespace df
     Option<T>::parse(const std::string& arg)
     {
       std::istringstream arg_ss (arg,std::istringstream::in);
-      arg_ss.exceptions(std::ios::failbit);
-      try
-      {
-        arg_ss >> opt_storage;
-      }
-      catch (...)
-      {
-        throw ParseFailure(opt_string, arg);
-      }
+      // arg_ss.exceptions(std::ios::failbit);
+       arg_ss >> opt_storage;
+      // try
+      // {
+      //   arg_ss >> opt_storage;
+      // }
+      // catch (...)
+      // {
+      //   throw ParseFailure(opt_string, arg);
+      // }
     }
 
     /* string parsing is specialized -- copy the whole string, not just the
