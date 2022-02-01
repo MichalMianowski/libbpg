@@ -38,7 +38,7 @@ DecodedImage load_bpg_image(char *filename){
     buf_len = ftell(f);
     fseek(f, 0, SEEK_SET);
 
-    buf = malloc(buf_len);
+    buf = (uint8_t*)malloc(buf_len);
     if (fread(buf, 1, buf_len, f) != buf_len) {
         fprintf(stderr, "Error while reading file\n");
         return decoded_image;
@@ -67,9 +67,9 @@ DecodedImage load_bpg_image(char *filename){
     }
 
     line_len = pixel_len * w;
-    raw_data = malloc(h * line_len * sizeof( int ));
+    raw_data = (int*)malloc(h * line_len * sizeof( int ));
     
-    rgb_line = malloc(line_len);    
+    rgb_line = (uint8_t*)malloc(line_len);    
 
     bpg_decoder_start(img, out_fmt);
     for (y = 0; y < h; y++) {
