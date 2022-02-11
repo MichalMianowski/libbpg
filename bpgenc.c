@@ -2981,7 +2981,7 @@ int main(int argc, char **argv)
 
 // Code added by Michal Mianowski to create bpg_load_save_lib in format .so/.dll
 
-void array_read_image(uint8_t **rows, DecodedImage *img_bpg, BPGImageFormatEnum format){
+void array_read_image(uint8_t **rows, DecodedImage *img_bpg){
     int line_len = img_bpg->w * img_bpg->pixel_len;
     
     for (int y = 0; y < img_bpg->h; y++) {
@@ -2991,18 +2991,15 @@ void array_read_image(uint8_t **rows, DecodedImage *img_bpg, BPGImageFormatEnum 
     }
 }
 
-Image *decoded_image_read_raw_data(DecodedImage *decoded_image){
+Image *decoded_image_read_raw_data(DecodedImage *decoded_image, BPGColorSpaceEnum color_space){
     int bit_depth, color_type, limited_range, premultiplied_alpha, out_bit_depth;
     Image *img;
     uint8_t **rows;
     int y, has_alpha, line_len, bpp;
     BPGImageFormatEnum chroma_format;
     ColorConvertState cvt_s, *cvt = &cvt_s;
-    
-    BPGColorSpaceEnum color_space;
 
     bit_depth = 8;
-    color_space = BPG_CS_RGB;
     chroma_format = BPG_FORMAT_444;
     
     if(decoded_image->is_grayscale){
@@ -3035,7 +3032,7 @@ Image *decoded_image_read_raw_data(DecodedImage *decoded_image){
         rows[y] = malloc(line_len);
     }
     
-    array_read_image(rows, decoded_image, chroma_format);
+    array_read_image(rows, decoded_image);
     
     convert_init(cvt, bit_depth, out_bit_depth, color_space, limited_range);
 
@@ -3093,7 +3090,9 @@ Image *decoded_image_read_raw_data(DecodedImage *decoded_image){
 
 
 int save_bpg_image(DecodedImage *decoded_image, char *outfilename, int qp, 
-                int lossless, int compress_level, int preffered_chroma_format){  
+                int lossless, int compress_level, int preffered_chroma_format, int output_color_space){  
+    BPGColorSpaceEnum color_space;
+    
     if (qp < 0 || qp > 51){
         fprintf(stderr, "qp must be between 0 and 51\n");
         return 1;
@@ -3110,6 +3109,26 @@ int save_bpg_image(DecodedImage *decoded_image, char *outfilename, int qp,
         fprintf(stderr, "preffered_chroma_format must be 420, 422 or 444\n");
         return 4;
     }
+    switch (output_color_space){
+        case 0:
+            color_space = BPG_CS_YCbCr;
+            break;
+        case 1:
+            color_space = BPG_CS_RGB;
+            break;
+        case 2:
+            color_space = BPG_CS_YCgCo;
+            break;
+        case 3:
+            color_space = BPG_CS_YCbCr_BT709;
+            break;
+        case 4:
+            color_space = BPG_CS_YCbCr_BT2020;
+            break;
+        default:
+            fprintf(stderr, "given color_space should be number 0 1 2 or 4, color_space set to YCbCr\n");
+            color_space = BPG_CS_YCbCr;
+    }
 
     Image *img;
     FILE *f;
@@ -3124,11 +3143,6 @@ int save_bpg_image(DecodedImage *decoded_image, char *outfilename, int qp,
     p->qp = qp;
     p->compress_level = compress_level;
 
-    if(lossless = 1){
-        p->lossless = 1;
-        p->preferred_chroma_format = BPG_FORMAT_444;
-    }
-    
     switch (preffered_chroma_format)
     {
     case 420:
@@ -3142,10 +3156,12 @@ int save_bpg_image(DecodedImage *decoded_image, char *outfilename, int qp,
         break;
     }
 
-    p->qp; //0-51
-    p->lossless; // when 1 then qp is ignored and preferred_chroma_format should be manually set to 444 
-    p->compress_level; //1-9
-    p->preferred_chroma_format; //444 422 420
+    if(lossless = 1){
+        p->lossless = 1;
+        p->preferred_chroma_format = BPG_FORMAT_444;
+    }
+    
+    
     
     f = fopen(outfilename, "wb");
     if (!f) {
@@ -3159,7 +3175,7 @@ int save_bpg_image(DecodedImage *decoded_image, char *outfilename, int qp,
         return 6;
     }
 
-    img = decoded_image_read_raw_data(decoded_image);
+    img = decoded_image_read_raw_data(decoded_image, color_space);
     if (!img) {
         fprintf(stderr, "Could not read image'\n");
         return 7;

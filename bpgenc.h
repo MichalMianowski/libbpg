@@ -35,7 +35,7 @@ typedef struct DecodedImage
 } DecodedImage;
 
 int save_bpg_image(DecodedImage *decoded_image, char *outfilename, int qp, 
-                int lossless, int compress_level, int preffered_chroma_format);
+                int lossless, int compress_level, int preffered_chroma_format, int output_color_space);
 
 // rest of original header:
 
